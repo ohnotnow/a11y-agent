@@ -1,4 +1,3 @@
-import { voiceOver, macOSActivate, MacOSKeyCodes } from "@guidepup/guidepup";
 import { chromium, webkit } from "playwright";
 import { settlePage } from "../browser.js";
 import type { CheckResult } from "../report.js";
@@ -36,6 +35,11 @@ export async function runSr(url: string, opts: SrOptions = {}): Promise<CheckRes
   if (process.platform !== "darwin") {
     throw new Error("a11y sr drives the real macOS VoiceOver and only runs on macOS");
   }
+
+  // Imported lazily: guidepup constructs a ScreenReader at module scope, which
+  // throws on any machine without one — a static import here would crash the
+  // whole CLI at startup on Linux, before the --foreground gate can run.
+  const { voiceOver, macOSActivate, MacOSKeyCodes } = await import("@guidepup/guidepup");
 
   const browserName = opts.browser ?? "webkit";
   const launcher = browserName === "webkit" ? webkit : chromium;
