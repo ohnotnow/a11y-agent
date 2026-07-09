@@ -1,10 +1,26 @@
 # a11y-agent
 
-Accessibility checks for a running web page, in one command. Point it at a URL and it runs an axe-core scan, a keyboard tab-order walk and a virtual screen reader pass, then gives you one structured report.
+Ask your coding agent for the accessibility audit you were never going to get round to by hand:
+
+> *"Sweep every page of this app and tell me what's worth fixing first."*
+>
+> *"Check the screens we built today before I push."*
+
+a11y-agent is what makes that a real request rather than a hallucination: a deterministic CLI that runs an axe-core scan, a keyboard tab-order walk and a screen reader pass — a fast, quiet virtual one by default, or the real VoiceOver for the final quality check — against any running page, and returns one structured report an agent (or a human) can read with judgement. A ready-made Claude Code skill and background sub-agent ship in `claude/`. No agent required — it's a perfectly good standalone CLI — but delegation is where it earns its name.
+
+- [Why](#why)
+- [Install](#install)
+- [Using it from Claude Code](#using-it-from-claude-code)
+- [Usage](#usage)
+- [Pages behind a login](#pages-behind-a-login)
+- [Sweeping a whole app](#sweeping-a-whole-app)
+- [The report](#the-report)
+- [Quick mode vs full-fat mode](#quick-mode-vs-full-fat-mode)
+- [Development](#development)
 
 ## Why
 
-Automated scanners (Lighthouse, the axe browser extension) catch roughly 30–40% of WCAG issues. The misses are the things that actually wreck the experience for keyboard and screen-reader users: no skip-to-content link, broken tab order, landmark soup, controls announced as a bare "button" with nothing to identify them. Checking those by hand is gruelling, so it rarely happens.
+Automated scanners (Lighthouse, the axe browser extension) catch roughly 30–40% of WCAG issues. The misses are the things that actually wreck the experience for keyboard and screen-reader users: no skip-to-content link, broken tab order, landmark soup, controls announced as a bare "button" with nothing to identify them. Checking those by hand is gruelling, so it rarely happens — the gap isn't tooling, it's labour.
 
 This tool automates the grind:
 
@@ -31,6 +47,38 @@ npm run build
 ```
 
 Requires Node 20+.
+
+## Using it from Claude Code
+
+This is the headline mode: the jobs you'd never get round to — auditing every page of an app, re-checking everything a branch touched — become one sentence in a session:
+
+> *"Run an a11y check on the dashboard and fix the worst of what it finds."*
+
+Setup is three steps, once:
+
+1. Set up a clone of this repo, per [Install](#install) above — anywhere you like. Claude runs the tool from that clone; your apps need nothing added to them.
+
+2. Copy in the skill and the background sub-agent:
+
+   ```
+   cp -r claude/skills/a11y-check ~/.claude/skills/
+   cp claude/agents/a11y-checker.md ~/.claude/agents/
+   ```
+
+3. Tell Claude where the clone lives, so it never has to ask — one line in your global `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`) does it:
+
+   ```
+   The a11y-agent accessibility checker lives at ~/code/a11y-agent.
+   ```
+
+   Skip this and the skill will still cope: it looks for the clone and asks you for the path if it can't find one.
+
+What you've just installed:
+
+- **The skill** (`claude/skills/a11y-check/`) teaches a session to run the checks, handle seeded-credential logins, build sweep URL lists from a Laravel router, and read the reports properly: triage the hard findings, then apply judgement to the raw material (tab order, landmarks, the screen-reader transcript) and propose concrete fixes.
+- **The sub-agent** (`claude/agents/a11y-checker.md`) does the checking in the background while the main session carries on working, reporting back findings by impact with a ship / fix-first verdict per page. It is read-only towards your app, and it refuses the real-VoiceOver tier — that stays a deliberate foreground act for a human.
+
+The quick checks are deterministic, headless and quiet by design, so an agent can run them mid-session without stealing your screen, your speech output or your keyboard focus.
 
 ## Usage
 
@@ -164,10 +212,6 @@ npm run a11y -- sr http://localhost:8000/dashboard --foreground
 ```
 
 `--foreground` is required and deliberate: the command takes over VoiceOver, speech and keyboard focus on your Mac for the duration (put the kettle on). Without it the command refuses to run. `--browser chromium` switches from the default WebKit; `--storage-state` works exactly as for the other checks. The report carries the VoiceOver transcript under `checks.sr.transcript`.
-
-## Using it from Claude Code
-
-`claude/` contains a skill (`claude/skills/a11y-check/`) and a background sub-agent definition (`claude/agents/a11y-checker.md`) documenting how agent sessions should invoke this tool and read its reports. Copy them into `~/.claude/skills/` and `~/.claude/agents/` respectively.
 
 ## Development
 
