@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Broken fixture — deliberately inaccessible page</title>
+  <style>
+    body { font-family: system-ui, sans-serif; color: #777777; background: #ffffff; margin: 0; padding: 1em; }
+    .banner { font-size: 24px; }
+    .faint { color: #cccccc; }
+    .fake-button { display: inline-block; padding: 0.5em 1em; background: #eeeeee; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <!-- No skip link; no landmarks; heading is a styled span -->
+  <div class="banner"><span>Departmental Timetable</span></div>
+
+  <!-- Jumbled positive tabindex values -->
+  <div>
+    <a href="#one" tabindex="3">Third stop</a>
+    <a href="#two" tabindex="1">First stop</a>
+    <a href="#three" tabindex="2">Second stop</a>
+  </div>
+
+  <!-- Low-contrast text -->
+  <p class="faint">This text is very low contrast and hard to read.</p>
+
+  <!-- Unlabelled inputs and a div-soup "button" (no role, no tabindex) -->
+  <div>
+    <input type="text" name="q">
+    <input type="email" name="mail">
+    <div class="fake-button" onclick="alert('searching')">Search</div>
+  </div>
+
+  <!-- Duplicate ids on focusable elements: both compute the same #dup selector,
+       which must not truncate the tab walk -->
+  <p>
+    <button id="dup">Twin A</button>
+    <button id="dup">Twin B</button>
+  </p>
+
+  <!-- Empty button; aria-labelledby pointing at a missing id -->
+  <button aria-labelledby="does-not-exist"></button>
+
+  <!-- Wrong role outside its required parent -->
+  <span role="menuitemcheckbox">Weird role outside a menu</span>
+
+  <!-- Image with no alt attribute -->
+  <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+</body>
+</html>

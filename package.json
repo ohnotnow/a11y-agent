@@ -1,0 +1,34 @@
+{
+  "name": "a11y-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Accessibility checking CLI: axe-core scan, tab-order walk, virtual screen reader transcript",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "a11y": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc && node scripts/bundle-vsr.mjs",
+    "test": "vitest run",
+    "a11y": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@guidepup/guidepup": "^0.28.1",
+    "@guidepup/playwright": "^0.17.0",
+    "@guidepup/virtual-screen-reader": "^0.32.1",
+    "commander": "^15.0.0",
+    "playwright": "^1.61.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.23.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.10"
+  }
+}

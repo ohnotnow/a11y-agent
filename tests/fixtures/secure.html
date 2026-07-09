@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Secure area fixture</title>
+  <style>
+    body { font-family: system-ui, sans-serif; color: #1a1a1a; background: #ffffff; margin: 0; }
+    .skip-link { position: absolute; left: -999px; }
+    .skip-link:focus { left: 8px; top: 8px; }
+    main, header { padding: 1em; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header>
+    <h1>Secure area</h1>
+  </header>
+  <main id="main">
+    <p>Only logged-in sessions can see this page.</p>
+  </main>
+</body>
+</html>
