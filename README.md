@@ -2,10 +2,6 @@
 
 Accessibility checks for a running web page, in one command. Point it at a URL and it runs an axe-core scan, a keyboard tab-order walk and a virtual screen reader pass, then gives you one structured report.
 
-```
-npm run a11y -- quick http://localhost:8000
-```
-
 ## Why
 
 Automated scanners (Lighthouse, the axe browser extension) catch roughly 30–40% of WCAG issues. The misses are the things that actually wreck the experience for keyboard and screen-reader users: no skip-to-content link, broken tab order, landmark soup, controls announced as a bare "button" with nothing to identify them. Checking those by hand is gruelling, so it rarely happens.
