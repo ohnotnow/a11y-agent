@@ -11,31 +11,39 @@ pass, producing one JSON report.
 
 ## Prerequisites
 
-- A local clone of the **a11y-agent** repo, set up per its README (dependencies
-  installed, chromium installed, `npm run build` done). Its path is referred to
-  as `A11Y_DIR` below — ask the user for it if you can't find the clone.
+- A local clone of the **a11y-agent** repo, set up per its README (`npm run setup`
+  installs dependencies and chromium, builds, and puts an `a11y` wrapper on PATH).
 - The app you're checking must be running and reachable (e.g. `http://localhost:8000`).
 
-**First-time pre-flight**: before running any check, confirm `$A11Y_DIR/dist/cli.js`
-exists. If it doesn't, the clone isn't set up — hand the user the README's install
-commands to run themselves (package installs and browser downloads are the user's
-call, not yours) rather than running installs unasked. A missing
-`assets/vsr-bundle.js` error means the same thing: the build step hasn't run.
+**Finding the tool**: try `command -v a11y` first — the wrapper has its clone's
+location baked in, so if it's on PATH you need nothing else. Otherwise find the
+clone (its path is `A11Y_DIR` below; ask the user if you can't find one) and run
+every command as `npm --prefix "$A11Y_DIR" run a11y -- …` instead — the examples
+below use the short `a11y …` form and substitute 1:1. One override: if the user
+has explicitly given you a clone path, use it rather than the PATH wrapper — on
+a machine with more than one clone, the stated path wins.
+
+**First-time pre-flight**: if `a11y` isn't on PATH and `$A11Y_DIR/dist/cli.js`
+doesn't exist either, the clone isn't set up — hand the user the one command
+(`npm run setup`, in the clone) to run themselves (package installs and browser
+downloads are the user's call, not yours) rather than running installs unasked.
+A missing `assets/vsr-bundle.js` error means the same thing: the build step
+hasn't run, and the same command fixes it.
 
 ## Running checks
 
 All quick-mode checks, one merged report (the usual choice):
 
 ```bash
-npm --prefix "$A11Y_DIR" run a11y -- quick http://localhost:8000/some/page
+a11y quick http://localhost:8000/some/page
 ```
 
 Individual tiers when you only need one:
 
 ```bash
-npm --prefix "$A11Y_DIR" run a11y -- axe http://localhost:8000/some/page
-npm --prefix "$A11Y_DIR" run a11y -- tabwalk http://localhost:8000/some/page
-npm --prefix "$A11Y_DIR" run a11y -- vsr http://localhost:8000/some/page
+a11y axe http://localhost:8000/some/page
+a11y tabwalk http://localhost:8000/some/page
+a11y vsr http://localhost:8000/some/page
 ```
 
 Flags: `--human` (markdown instead of JSON — good for showing the user),
@@ -53,8 +61,8 @@ behaviour during hydration is not what real users experience.
 Log in once, then pass the saved session to every check:
 
 ```bash
-npm --prefix "$A11Y_DIR" run a11y -- login http://localhost:8000/login --save /tmp/a11y-state.json
-npm --prefix "$A11Y_DIR" run a11y -- quick http://localhost:8000/dashboard --storage-state /tmp/a11y-state.json
+a11y login http://localhost:8000/login --save /tmp/a11y-state.json
+a11y quick http://localhost:8000/dashboard --storage-state /tmp/a11y-state.json
 ```
 
 - Defaults are the team's seeded-admin convention (`admin2x` / `secret`) — try them
@@ -83,7 +91,7 @@ one browser session, one report with a cross-page `summary.findings` map (findin
 count + pages), which is the input for spotting recurring patterns:
 
 ```bash
-npm --prefix "$A11Y_DIR" run a11y -- sweep --urls /tmp/pages.txt --storage-state /tmp/a11y-state.json
+a11y sweep --urls /tmp/pages.txt --storage-state /tmp/a11y-state.json
 ```
 
 Building the list for a Laravel app:
@@ -144,7 +152,7 @@ focus, the lot — so it is a deliberate foreground act, never a background one 
 never yours to spring on them:
 
 ```bash
-npm --prefix "$A11Y_DIR" run a11y -- sr http://localhost:8000/dashboard --foreground
+a11y sr http://localhost:8000/dashboard --foreground
 ```
 
 - **Before running**: tell the user their Mac is about to start speaking and take

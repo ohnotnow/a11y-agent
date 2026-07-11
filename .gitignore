@@ -4,3 +4,4 @@ node_modules/
 dist/
 assets/vsr-bundle.js
 .a11y-state.json
+bin/

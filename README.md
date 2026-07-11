@@ -41,10 +41,12 @@ Everything runs from a clone — there is no npm package.
 ```
 git clone https://github.com/ohnotnow/a11y-agent.git
 cd a11y-agent
-npm install
-npx playwright install chromium
-npm run build
+npm run setup
 ```
+
+`npm run setup` installs the dependencies and the Playwright Chromium build, compiles the tool, then puts an `a11y` command on your PATH: it writes a wrapper to `bin/a11y` (with this clone's absolute path baked in) and symlinks it into `/usr/local/bin` or `/opt/homebrew/bin`, whichever exists and is writable. If neither is — stock macOS wants sudo for `/usr/local/bin` — it prints the one `sudo ln -s` line for you to run yourself. Set `A11Y_BIN_DIR` to aim the symlink somewhere else (`A11Y_BIN_DIR=~/bin npm run setup`). Re-running setup is safe; it won't clobber anything already squatting on the `a11y` name.
+
+Prefer the steps by hand? They are `npm install`, `npx playwright install chromium`, `npm run build` — and every `a11y …` command below can then be run from the clone as `npm run a11y -- …` instead.
 
 Requires Node 20+.
 
@@ -85,10 +87,10 @@ The quick checks are deterministic, headless and quiet by design, so an agent ca
 Run against any reachable page — typically your local dev server:
 
 ```
-npm run a11y -- quick http://localhost:8000            # all three checks, one report
-npm run a11y -- axe http://localhost:8000              # axe-core scan only
-npm run a11y -- tabwalk http://localhost:8000          # tab-order / structural walk only
-npm run a11y -- vsr http://localhost:8000              # virtual screen reader only
+a11y quick http://localhost:8000            # all three checks, one report
+a11y axe http://localhost:8000              # axe-core scan only
+a11y tabwalk http://localhost:8000          # tab-order / structural walk only
+a11y vsr http://localhost:8000              # virtual screen reader only
 ```
 
 Flags:
@@ -107,8 +109,8 @@ The default axe tags are `wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa`.
 Most real pages are. Log in once, then reuse the session for as many checks as you like:
 
 ```
-npm run a11y -- login http://localhost:8000/login --save .a11y-state.json
-npm run a11y -- quick http://localhost:8000/dashboard --storage-state .a11y-state.json
+a11y login http://localhost:8000/login --save .a11y-state.json
+a11y quick http://localhost:8000/dashboard --storage-state .a11y-state.json
 ```
 
 `a11y login` drives the actual login form (CSRF is handled for free, since it genuinely submits the form), verifies a password field is no longer visible afterwards, and saves the session cookies. It defaults to our seeded-admin convention (`--user admin2x --pass secret`); override those, and `--user-field` / `--pass-field` / `--submit` selectors for forms that differ from the Laravel norm.
@@ -116,7 +118,7 @@ npm run a11y -- quick http://localhost:8000/dashboard --storage-state .a11y-stat
 Two rules:
 
 - **Seeded local-dev credentials only.** Never point this at anything production-shaped.
-- The state file holds a live session cookie. It is gitignored (`.a11y-state.json`) — keep it that way.
+- The state file holds a live session cookie. This clone gitignores `.a11y-state.json`, but now that `a11y` runs from anywhere, the file lands wherever you run it — if that's your app's directory, make sure it's ignored there too (or `--save` it somewhere outside the repo).
 
 Local HTTPS with self-signed or local-CA certificates (Lando's `*.lndo.site`, Valet, etc.) works out of the box: certificate errors are ignored, as befits a local checking tool.
 
@@ -127,8 +129,8 @@ One tip for Laravel apps: run checks with debug overlays disabled (e.g. Laravel 
 `sweep` runs all three checks over a list of URLs in one browser session and adds a cross-page summary, which is where per-page findings turn into app-wide patterns:
 
 ```
-npm run a11y -- login http://localhost:8000/login --save .a11y-state.json
-npm run a11y -- sweep --urls pages.txt --storage-state .a11y-state.json
+a11y login http://localhost:8000/login --save .a11y-state.json
+a11y sweep --urls pages.txt --storage-state .a11y-state.json
 ```
 
 `pages.txt` is one URL per line (`#` comments allowed; `--urls -` reads stdin). Pages that answer non-2xx (403, 404, 500) or bounce to a login page are recorded as skipped with a reason rather than polluting the findings. The report has a `summary.findings` map keyed by finding id (count and affected pages), plus per-page detail; `--human` renders the summary table first.
@@ -196,8 +198,7 @@ Everything above is **quick mode**: simulated, deterministic, background-safe. I
 VoiceOver automation needs a one-time permission dance (macOS only, WebKit by default):
 
 ```
-npm install                       # includes @guidepup/guidepup + @guidepup/playwright
-npx playwright install webkit
+npx playwright install webkit     # sr drives WebKit by default; Guidepup itself came with `npm run setup`
 npx @guidepup/setup               # then follow the linked manual guide it prints
 ```
 
@@ -208,7 +209,7 @@ npx @guidepup/setup               # then follow the linked manual guide it print
 ### Running it
 
 ```
-npm run a11y -- sr http://localhost:8000/dashboard --foreground
+a11y sr http://localhost:8000/dashboard --foreground
 ```
 
 `--foreground` is required and deliberate: the command takes over VoiceOver, speech and keyboard focus on your Mac for the duration (put the kettle on). Without it the command refuses to run. `--browser chromium` switches from the default WebKit; `--storage-state` works exactly as for the other checks. The report carries the VoiceOver transcript under `checks.sr.transcript`.

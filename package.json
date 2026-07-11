@@ -12,6 +12,7 @@
     "a11y": "dist/cli.js"
   },
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "build": "tsc && node scripts/bundle-vsr.mjs",
     "test": "vitest run",
     "a11y": "node dist/cli.js"
