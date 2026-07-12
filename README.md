@@ -60,6 +60,8 @@ This is the headline mode: Get claude or codex to do the work for you.
 
 The repo at the moment comes with specific real-world Laravel/Livewire/Flux examples for the skill and agent as added extras if the agent sees that you're in that kind of app.  If you use a different stack - you can add your own examples to the skill's references/ directory.
 
+The skill/agent also has instructions for figuring out 'is this issue actually with a 3rd party component?' and will report it as a 'you might want to raise an issue with <name-of-3rd-party> project - here's what needs fixed'.
+
 Setup is three steps, once:
 
 1. Set up a clone of this repo, per [Install](#install) above — anywhere you like. Claude or your agent of choice (I'll just assume claude for the examples) runs the tool from that clone; your apps need nothing added to them.
