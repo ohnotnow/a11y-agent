@@ -6,7 +6,7 @@ Ask your coding agent for the accessibility audit you were never going to get ro
 >
 > *"Check the screens we built today before I push."*
 
-a11y-agent is what makes that a real request rather than a hallucination: a deterministic CLI that runs an axe-core scan, a keyboard tab-order walk and a screen reader pass — a fast, quiet virtual one by default, or the real VoiceOver for the final quality check — against any running page, and returns one structured report an agent (or a human) can read with judgement. A ready-made Claude Code skill and background sub-agent ship in `claude/`. No agent required — it's a perfectly good standalone CLI — but delegation is where it earns its name.
+a11y-agent is a deterministic CLI that runs an axe-core scan, a keyboard tab-order walk and a screen reader pass — a fast, quiet virtual one by default, or the real VoiceOver for the final quality check — against any running page, and returns one structured report an agent (or a human) can read with judgement. A ready-made Claude Code skill and background sub-agent ship in `claude/`. No agent required — it's a perfectly good standalone CLI — but why not lean on an agent these days.
 
 - [Why](#why)
 - [Install](#install)
@@ -20,9 +20,11 @@ a11y-agent is what makes that a real request rather than a hallucination: a dete
 
 ## Why
 
-Automated scanners (Lighthouse, the axe browser extension) catch roughly 30–40% of WCAG issues. The misses are the things that actually wreck the experience for keyboard and screen-reader users: no skip-to-content link, broken tab order, landmark soup, controls announced as a bare "button" with nothing to identify them. Checking those by hand is gruelling, so it rarely happens — the gap isn't tooling, it's labour.
+Automated scanners (Lighthouse, the axe browser extension) catch a decent amount of WCAG issues.  But they (in my experience) miss a lot of things that actually hurt a11y for end users.  They can also be quite unfriendly to developers - reporting issues in the final rendered DOM that leaves you with piecing together how that maps to your templates, components, etc.
 
-This tool automates the grind:
+And as we're all using agents now - why not lean on their 'smarts' to help fix up issues, map DOM issues to real templates, etc.
+
+So this tool is designed to reduce the friction and 'urgh' of a11y audits and makes it easier to actually fix them:
 
 | Tier | Check | What it catches |
 |------|-------|-----------------|
@@ -30,9 +32,9 @@ This tool automates the grind:
 | 2 | `tabwalk` | Skip link, tab order, focus traps, unreachable controls, landmarks |
 | 3 | `vsr` | What a screen reader would actually announce, as a text transcript |
 
-All three tiers are simulator/injection based; no real screen reader is touched. That makes them safe to run headless, in CI, or in the background while you work.
+All three tiers are simulator/injection based; no real screen reader is touched so it's fast and silent. That makes them safe to run headless, in CI, or in the background while you work.
 
-The axe tier defaults to **WCAG 2.1 AA + 2.2 AA** rules, since UK public sector bodies are monitored against WCAG 2.2 AA (Public Sector Bodies Accessibility Regulations; monitoring moved to 2.2 in late 2024).
+The axe tier defaults to **WCAG 2.1 AA + 2.2 AA** rules (the default for UK public sector bodies (Public Sector Bodies Accessibility Regulations; monitoring moved to 2.2 in late 2024).
 
 ## Install
 
@@ -52,13 +54,15 @@ Requires Node 20+.
 
 ## Using it from Claude Code
 
-This is the headline mode: the jobs you'd never get round to — auditing every page of an app, re-checking everything a branch touched — become one sentence in a session:
+This is the headline mode: Get claude or codex to do the work for you.
 
-> *"Run an a11y check on the dashboard and fix the worst of what it finds."*
+> *"Run an a11y check on the dashboard at http://localhost:3000/dashboard and fix the worst of what it finds."*
+
+The repo at the moment comes with specific real-world Laravel/Livewire/Flux examples for the skill and agent as added extras if the agent sees that you're in that kind of app.  If you use a different stack - you can add your own examples to the skill's references/ directory.
 
 Setup is three steps, once:
 
-1. Set up a clone of this repo, per [Install](#install) above — anywhere you like. Claude runs the tool from that clone; your apps need nothing added to them.
+1. Set up a clone of this repo, per [Install](#install) above — anywhere you like. Claude or your agent of choice (I'll just assume claude for the examples) runs the tool from that clone; your apps need nothing added to them.
 
 2. Copy in the skill and the background sub-agent:
 
@@ -67,7 +71,7 @@ Setup is three steps, once:
    cp claude/agents/a11y-checker.md ~/.claude/agents/
    ```
 
-3. Tell Claude where the clone lives, so it never has to ask — one line in your global `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`) does it:
+3. If you didn't set up the global helper - tell Claude where the clone lives, so it never has to ask — one line in your global `~/.claude/CLAUDE.md` (or a project's `CLAUDE.md`) does it:
 
    ```
    The a11y-agent accessibility checker lives at ~/code/a11y-agent.
@@ -82,7 +86,7 @@ What you've just installed:
 
 The quick checks are deterministic, headless and quiet by design, so an agent can run them mid-session without stealing your screen, your speech output or your keyboard focus.
 
-## Usage
+## Manual Usage
 
 Run against any reachable page — typically your local dev server:
 
@@ -154,7 +158,7 @@ For a Laravel app, generate the list from the router (drop parameterised and uti
 php artisan route:list --except-vendor --except-path=api --method=GET --json
 ```
 
-For routes with parameters (`/admin/users/{user}`), let Laravel build real URLs from seeded data rather than guessing ids: `route('admin.users.show', \App\Models\User::first())` in tinker. Read-only calls, seeded local data only.
+For routes with parameters (`/admin/users/{user}`), let Laravel build real URLs from seeded data rather than guessing ids: `route('admin.users.show', \App\Models\User::first())` in tinker. 
 
 ## The report
 
