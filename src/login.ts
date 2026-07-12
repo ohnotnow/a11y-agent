@@ -11,8 +11,15 @@ export interface LoginOptions {
 }
 
 export interface LoginResult {
-  savedTo: string;
+  /** The verification verdict: the form submitted and no password field remained visible. */
+  loggedIn: boolean;
+  /** Where the session state was written; null when login failed (nothing is saved). */
+  savedTo: string | null;
   finalUrl: string;
+  /** Corroborating evidence, not a verdict: false alongside loggedIn true deserves suspicion. */
+  urlChanged: boolean;
+  /** Present when loggedIn is false. */
+  reason?: string;
 }
 
 // Laravel-friendly defaults; override flags exist for apps that differ.
@@ -41,14 +48,25 @@ export async function runLogin(loginUrl: string, opts: LoginOptions): Promise<Lo
       .first()
       .isVisible()
       .catch(() => false);
+
+    const finalUrl = page.url();
+    const urlChanged = finalUrl !== loginUrl;
+
+    // A verified failure is a result, not a crash: no state is saved (a dead
+    // session file would silently poison every later check), and the CLI turns
+    // loggedIn: false into a non-zero exit.
     if (passwordStillVisible) {
-      throw new Error(
-        `login appears to have failed: a password field is still visible after submitting (${page.url()})`,
-      );
+      return {
+        loggedIn: false,
+        savedTo: null,
+        finalUrl,
+        urlChanged,
+        reason: "a password field is still visible after submitting — wrong credentials or a selector mismatch",
+      };
     }
 
     await context.storageState({ path: opts.save });
-    return { savedTo: opts.save, finalUrl: page.url() };
+    return { loggedIn: true, savedTo: opts.save, finalUrl, urlChanged };
   } finally {
     await browser.close();
   }

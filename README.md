@@ -100,7 +100,7 @@ Flags:
 | `--human` | all | Render the report as markdown instead of JSON |
 | `--timeout <ms>` | all | Navigation timeout (default 30000) |
 | `--settle <ms>` | all | Extra settle time after load before checking (default 1000). Livewire/Alpine pages re-wire focus during hydration, and measuring too early produces false findings |
-| `--tags <list>` | `axe` | Override the default WCAG tag set, e.g. `--tags wcag2a,wcag2aa` for strict 2.0/2.1-only runs |
+| `--tags <list>` | `axe`, `quick`, `sweep` | Override the default WCAG tag set for the axe tier, e.g. `--tags wcag2a,wcag2aa` for strict 2.0/2.1-only runs |
 
 The default axe tags are `wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa`.
 
@@ -114,6 +114,19 @@ a11y quick http://localhost:8000/dashboard --storage-state .a11y-state.json
 ```
 
 `a11y login` drives the actual login form (CSRF is handled for free, since it genuinely submits the form), verifies a password field is no longer visible afterwards, and saves the session cookies. It defaults to our seeded-admin convention (`--user admin2x --pass secret`); override those, and `--user-field` / `--pass-field` / `--submit` selectors for forms that differ from the Laravel norm.
+
+The output says how it went, explicitly — no inferring from the final URL:
+
+```json
+{
+  "loggedIn": true,
+  "savedTo": ".a11y-state.json",
+  "finalUrl": "http://localhost:8000/dashboard",
+  "urlChanged": true
+}
+```
+
+`loggedIn` is the password-field verification's verdict. A verified failure prints `loggedIn: false` with a `reason`, saves **no** state file (a dead session would silently poison every later check), and exits non-zero. `urlChanged` is corroborating evidence, not a verdict — `loggedIn: true` with `urlChanged: false` deserves a suspicious look at `finalUrl`.
 
 Two rules:
 
@@ -150,7 +163,7 @@ JSON to stdout by default (the `--human` markdown renders the same data):
 ```json
 {
   "tool": "a11y",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "url": "http://localhost:8000/",
   "generatedAt": "2026-07-09T12:00:00.000Z",
   "checks": {
@@ -161,7 +174,12 @@ JSON to stdout by default (the `--human` markdown renders the same data):
           "impact": "serious",
           "summary": "Elements must meet minimum color contrast ratio thresholds",
           "detail": "…rule description and help URL…",
-          "nodes": ["p", ".hero"],
+          "nodes": [
+            {
+              "selector": "p.faint",
+              "failureSummary": "…insufficient color contrast of 2.85 (foreground color: #777777, background color: #ffffff…). Expected contrast ratio of 4.5:1"
+            }
+          ],
           "tags": ["wcag2aa", "wcag143", "…"]
         }
       ]
@@ -182,7 +200,7 @@ JSON to stdout by default (the `--human` markdown renders the same data):
 
 Reading it:
 
-- **`findings`** are the problems each check detected, each with a stable `id`, an `impact` (critical / serious / moderate / minor), and the affected `nodes` as CSS selectors. Tabwalk's finding ids: `no-skip-link`, `positive-tabindex`, `unreachable-interactive`, `focus-trap`. Vsr's: `bare-control`.
+- **`findings`** are the problems each check detected, each with a stable `id`, an `impact` (critical / serious / moderate / minor), and the affected `nodes` — each a `{selector, failureSummary?}` object, where the selector locates the element and `failureSummary` carries axe's per-node evidence (for `color-contrast`, that's the measured ratio and colours: the number the fix has to beat). Tabwalk's finding ids: `no-skip-link`, `positive-tabindex`, `unreachable-interactive`, `unreachable-composite-item` (items inside a roving-tabindex composite such as a tablist or menu — usually correct per the ARIA APG, so it's a minor "verify with arrow keys" prompt rather than an accusation), `named-by-placeholder-only` (a field whose only name is its placeholder — legal per spec and passed by axe, but the name vanishes the moment the field has content), `focus-trap`. Vsr's: `bare-control`.
 - **`focusOrder`, `ariaSnapshot`, `landmarks`, `transcript`** are raw material, not verdicts. A tab order can be technically valid but still insane, and only something (or someone) reading the transcript can judge "would I want to navigate this page blind?". They're in the report so a human or an agent can make those judgement calls.
 
 Exit codes mean tool health, not page quality: **0** when the checks ran (however bad the findings), non-zero only when the tool itself failed (unreachable URL, crash).
@@ -222,5 +240,7 @@ npm run build     # tsc + bundle the virtual screen reader for in-page injection
 ```
 
 The fixtures in `tests/fixtures/` are the contract: `broken.html` seeds one of every defect the checks must catch, `good.html` must stay clean, including against WCAG 2.2's newer rules (its nav links needed 24px touch targets for 2.5.8 Target Size, which the default rule set caught immediately).
+
+If you add, rename or re-tier a finding id, grep `claude/` (and this README) for the old one — the skill and sub-agent document ids in prose, and they go stale silently.
 
 CI (GitHub Actions, ubuntu) runs the full build and test suite on every push. The virtual screen reader is a pure simulator, so even the screen-reader tier runs happily headless on Linux.

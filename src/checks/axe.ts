@@ -19,7 +19,12 @@ export async function runAxe(page: Page, opts: AxeOptions = {}): Promise<CheckRe
     impact: violation.impact ?? undefined,
     summary: violation.help,
     detail: `${violation.description} (${violation.helpUrl})`,
-    nodes: violation.nodes.map((node) => node.target.join(" ")),
+    // failureSummary is the per-node evidence — for color-contrast it holds the
+    // measured ratio and colours, which IS the finding. Never flatten it away.
+    nodes: violation.nodes.map((node) => ({
+      selector: node.target.join(" "),
+      failureSummary: node.failureSummary || undefined,
+    })),
     tags: violation.tags,
   }));
 

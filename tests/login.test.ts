@@ -26,22 +26,30 @@ describe("login", () => {
       save: statePath,
     });
 
+    expect(result.loggedIn).toBe(true);
     expect(result.savedTo).toBe(statePath);
     expect(result.finalUrl).toContain("/secure.html");
+    expect(result.urlChanged).toBe(true);
 
     const state = JSON.parse(await readFile(statePath, "utf8"));
     const cookieNames = (state.cookies as Array<{ name: string }>).map((c) => c.name);
     expect(cookieNames).toContain("a11y_session");
   });
 
-  it("throws when the credentials are wrong", async () => {
-    await expect(
-      runLogin(`${server.url}/login.html`, {
-        user: "admin2x",
-        pass: "wrong-password",
-        save: join(tmpdir(), "a11y-login-test-should-not-exist.json"),
-      }),
-    ).rejects.toThrow(/login appears to have failed/);
+  it("reports a verified failure and saves nothing when the credentials are wrong", async () => {
+    const badPath = join(tmpdir(), `a11y-login-test-should-not-exist-${process.pid}.json`);
+    const result = await runLogin(`${server.url}/login.html`, {
+      user: "admin2x",
+      pass: "wrong-password",
+      save: badPath,
+    });
+
+    expect(result.loggedIn).toBe(false);
+    expect(result.savedTo).toBeNull();
+    expect(result.reason).toMatch(/password field is still visible/);
+
+    // A dead session file must never be written for later checks to trip over.
+    await expect(readFile(badPath, "utf8")).rejects.toThrow();
   });
 
   it("reaches the gated page with storage state, and is bounced without it", async () => {

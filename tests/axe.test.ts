@@ -31,7 +31,23 @@ describe("axe check", () => {
       expect(finding.impact).toBeTruthy();
       expect(Array.isArray(finding.nodes)).toBe(true);
       expect(finding.nodes!.length).toBeGreaterThan(0);
+      for (const node of finding.nodes!) {
+        expect(node.selector).toBeTruthy();
+      }
       expect(Array.isArray(finding.tags)).toBe(true);
+    }
+  });
+
+  it("carries the measured contrast ratio through to the report", async () => {
+    const result = await withPage(`${server.url}/broken.html`, {}, (page) => runAxe(page));
+    const contrast = result.findings.find((f) => f.id === "color-contrast")!;
+    expect(contrast).toBeDefined();
+
+    // The per-node failureSummary IS the finding for contrast: the measured
+    // ratio and colours must survive the merge, not be flattened to a selector.
+    for (const node of contrast.nodes!) {
+      expect(node.failureSummary).toMatch(/contrast of \d/);
+      expect(node.failureSummary).toMatch(/foreground color/);
     }
   });
 

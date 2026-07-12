@@ -1,6 +1,6 @@
 {
   "name": "a11y-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Accessibility checking CLI: axe-core scan, tab-order walk, virtual screen reader transcript",
   "license": "AGPL-3.0-only",

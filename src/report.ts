@@ -1,9 +1,15 @@
+export interface FindingNode {
+  selector: string;
+  /** Per-node evidence, e.g. axe's measured contrast ratio and colours. */
+  failureSummary?: string;
+}
+
 export interface Finding {
   id: string;
   impact?: string;
   summary: string;
   detail?: string;
-  nodes?: string[];
+  nodes?: FindingNode[];
   tags?: string[];
 }
 
@@ -106,7 +112,19 @@ export function renderHuman(report: Report): string {
       lines.push(`- **${finding.id}** (${finding.impact ?? "info"}): ${finding.summary}`);
       if (finding.detail) lines.push(`  - ${finding.detail}`);
       if (finding.nodes && finding.nodes.length > 0) {
-        lines.push(`  - Nodes: ${finding.nodes.map((n) => `\`${n}\``).join(", ")}`);
+        // Per-node evidence (the measured contrast ratio, etc.) earns one line
+        // per node; without it the compact comma list reads better.
+        if (finding.nodes.some((n) => n.failureSummary)) {
+          lines.push("  - Nodes:");
+          for (const node of finding.nodes) {
+            const evidence = node.failureSummary
+              ? ` — ${node.failureSummary.split("\n").map((s) => s.trim()).filter(Boolean).join(" ")}`
+              : "";
+            lines.push(`    - \`${node.selector}\`${evidence}`);
+          }
+        } else {
+          lines.push(`  - Nodes: ${finding.nodes.map((n) => `\`${n.selector}\``).join(", ")}`);
+        }
       }
     }
   }

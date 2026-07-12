@@ -14,6 +14,8 @@
     button { color: #ffffff; background: #005a9c; border: none; padding: 0.5em 1em; }
     header, nav, main, footer { padding: 1em; }
     label { display: inline-block; min-width: 8em; }
+    [role="tab"][aria-selected="true"] { background: #003b66; }
+    [role="tabpanel"] { border: 1px solid #005a9c; padding: 0.5em 1em; }
   </style>
 </head>
 <body>
@@ -41,9 +43,46 @@
       </p>
       <p><button type="submit">Send request</button></p>
     </form>
+
+    <!-- APG-correct tabs: roving tabindex, arrow keys move focus and select.
+         The unselected tab must NOT be reported as unreachable-interactive
+         (it earns unreachable-composite-item at minor instead). -->
+    <h2>Timetable views</h2>
+    <div role="tablist" aria-label="Timetable views">
+      <button type="button" role="tab" id="tab-week" aria-selected="true" aria-controls="panel-week">Week</button>
+      <button type="button" role="tab" id="tab-month" aria-selected="false" aria-controls="panel-month" tabindex="-1">Month</button>
+    </div>
+    <div role="tabpanel" id="panel-week" aria-labelledby="tab-week" tabindex="0">
+      <p>Your timetable one week at a time.</p>
+    </div>
+    <div role="tabpanel" id="panel-month" aria-labelledby="tab-month" tabindex="0" hidden>
+      <p>Your timetable one month at a time.</p>
+    </div>
   </main>
   <footer>
     <p><a href="#main">Back to top</a></p>
   </footer>
+  <script>
+    const tablist = document.querySelector('[role="tablist"]');
+    const tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
+    const select = (tab) => {
+      for (const t of tabs) {
+        const selected = t === tab;
+        t.setAttribute("aria-selected", String(selected));
+        t.tabIndex = selected ? 0 : -1;
+        document.getElementById(t.getAttribute("aria-controls")).hidden = !selected;
+      }
+      tab.focus();
+    };
+    tablist.addEventListener("keydown", (e) => {
+      const moves = { ArrowRight: 1, ArrowLeft: -1 };
+      if (!(e.key in moves)) return;
+      const from = tabs.indexOf(document.activeElement);
+      if (from === -1) return;
+      e.preventDefault();
+      select(tabs[(from + moves[e.key] + tabs.length) % tabs.length]);
+    });
+    tabs.forEach((tab) => tab.addEventListener("click", () => select(tab)));
+  </script>
 </body>
 </html>

@@ -32,18 +32,30 @@ hasn't run, and the same command fixes it.
 
 ## Running checks
 
-**Pre-flight: debug overlays.** Fetch any page of the app once and look for a
-debug toolbar (`curl -s <url> | grep -c phpdebugbar` covers Laravel Debugbar)
-before spending a run. If one is present, stop and ask the user to disable it —
-that's their move (config/.env changes are theirs, not yours) — or agree to
-triage around it. An active toolbar pollutes more than axe's contrast results:
-it fills the tail of the vsr transcript too.
+**Pre-flight: debug overlays.** Check for a debug toolbar before spending a
+run — on a page that actually renders one. The naive check has two
+false-negative traps, both from a real run: on an auth-gated app an
+unauthenticated `curl` greps a 302's empty body (with the toolbar fully active
+behind the login), and local https (`*.lndo.site`, Valet) needs `-k` or the
+cert failure silently reads as 0 as well. `curl -skL <login-url> | grep -c
+phpdebugbar` covers Laravel Debugbar — login pages render the toolbar too.
+Belt and braces: after any run, grep the report JSON itself for `phpdebugbar`;
+that post-hoc tell is what catches a missed pre-flight. If a toolbar is
+present, stop and ask the user to disable it — that's their move (config/.env
+changes are theirs, not yours) — or agree to triage around it. An active
+toolbar pollutes more than axe's contrast results: it also fills the tail of
+the vsr transcript *and* the end of `tabwalk.focusOrder` — filter
+`phpdebugbar` out of both before reading them.
 
 All quick-mode checks, one merged report (the usual choice):
 
 ```bash
-a11y quick http://localhost:8000/some/page
+a11y quick http://localhost:8000/some/page > report.json
 ```
+
+Always redirect to a file and extract selectively — a single page's report can
+carry a 100+-line transcript plus a full aria snapshot, and running the
+command bare dumps all of it into your context.
 
 Individual tiers when you only need one:
 
@@ -56,19 +68,21 @@ a11y vsr http://localhost:8000/some/page
 Flags: `--human` (markdown instead of JSON — good for showing the user),
 `--timeout <ms>` (default 30000), `--settle <ms>` (default 1000 — extra wait after
 load; raise it for slow-hydrating pages before trusting a surprising tabwalk
-finding), and on `axe` only: `--tags <list>` to override the default
-WCAG 2.1 AA + 2.2 AA rule set (e.g. `--tags wcag2a,wcag2aa`).
+finding), and on `axe`, `quick` and `sweep`: `--tags <list>` to override the
+default WCAG 2.1 AA + 2.2 AA rule set for the axe tier (e.g. `--tags wcag2a,wcag2aa`).
 
 A hard-won rule: if a tabwalk finding looks dramatic (focus trap, swathes of
 unreachable elements), re-run with `--settle 3000` before believing it. Focus
 behaviour during hydration is not what real users experience.
 
-A second one, from a real run: `unreachable-interactive` fires on the ARIA
-roving-tabindex pattern, where being out of the Tab order is *correct*
-behaviour. If the flagged nodes have `role=tab` — or sit inside a tablist,
-menu, radiogroup, or grid — focus the active item in a browser and verify with
-arrow keys before reporting anything as unreachable. `--settle` won't help
-here; it's not a hydration problem.
+A second one, from a real run: items inside roving-tabindex composites
+(tablists, menus, radiogroups, grids) are *correctly* out of the Tab order —
+only the active item is tabbable. The tool knows the pattern and reports those
+separately as `unreachable-composite-item` (minor) instead of
+`unreachable-interactive` (serious). Treat the minor id as a verification
+prompt, not a defect: focus the active item in a browser and arrow across —
+only if focus doesn't move is it genuinely unreachable. `--settle` won't help
+with either id; this isn't a hydration problem.
 
 ## Pages behind a login
 
@@ -81,6 +95,9 @@ a11y quick http://localhost:8000/dashboard --storage-state /tmp/a11y-state.json
 
 - Defaults are the team's seeded-admin convention (`admin2x` / `secret`) — try them
   first, no flags needed. Override with `--user` / `--pass`.
+- Check `loggedIn: true` in the login output before spending runs — a silently
+  dead session surfaces later, confusingly, as a sweep full of login-redirect
+  skips.
 - If the user points you at a seeder ("credentials are in
   `database/seeds/TestDataSeeder.php`"), Read that file, extract the seeded
   email/password, and pass them explicitly.
@@ -92,9 +109,11 @@ a11y quick http://localhost:8000/dashboard --storage-state /tmp/a11y-state.json
   live session cookie.
 - Unusual form? `--user-field` / `--pass-field` / `--submit` take CSS selectors.
 - The saved state file is a standard Playwright storage state, so it plugs
-  straight into playwright-cli (`state-load`) when a finding needs hands-on
-  verification — no second login needed. Findings *will* need hands-on
-  verification (see the roving-tabindex rule above).
+  into playwright-cli when a finding needs hands-on verification — no second
+  login needed. Sequence matters: `playwright-cli open about:blank`, then
+  `state-load <file>`, then `goto <url>` — state loads into an already-open
+  browser, so a bare `state-load` as the first call fails. Findings *will*
+  need hands-on verification (see the roving-tabindex rule above).
 
 Exit codes mean tool health, not page quality: 0 = checks ran (findings are in the
 JSON); non-zero = the tool itself failed (app not running, bad URL). Report tool
@@ -132,17 +151,38 @@ session, missing sample id) before drawing conclusions.
 
 The JSON has `checks.axe`, `checks.tabwalk`, `checks.vsr`, each with a `findings`
 array: stable `id`, `impact` (critical / serious / moderate / minor), `summary`,
-`detail`, and affected `nodes` as CSS selectors.
+`detail`, and affected `nodes`. Node shape is the same on every tier: `selector`
+(a CSS path — there is no `html` field), plus `failureSummary` on axe nodes
+only, carrying the per-node evidence. Don't guess at other field names; that's
+the whole schema.
 
 **Findings are verdicts.** Triage by impact; the ids are stable:
 - axe: rule ids like `color-contrast`, `label`, `button-name`, `target-size`
-- tabwalk: `no-skip-link`, `positive-tabindex`, `unreachable-interactive`, `focus-trap`
+- tabwalk: `no-skip-link`, `positive-tabindex`, `unreachable-interactive`
+  (serious — a control Tab genuinely never reaches), `unreachable-composite-item`
+  (minor — likely roving tabindex; see the rule above), `named-by-placeholder-only`
+  (minor — axe passes these, but the name vanishes once the field has content),
+  `focus-trap`
 - vsr: `bare-control` (a control announced as a bare role with no name)
+
+For `color-contrast`, each node's `failureSummary` carries axe's measured ratio
+and colours — quote those, never re-derive them from CSS.
 
 But triage node-by-node, never finding-by-finding: a single axe finding can mix
 vendor-overlay noise (`.phpdebugbar-*` badges) with genuine app nodes in one
 `nodes` list, and dismissing the finding wholesale silently discards the real
 ones.
+
+Node selectors are good for this page load only: auto-generated ids
+(`#lofi-tab-…`) change on every render, so the moment you open the page
+yourself for hands-on verification, every selector in the report you're
+triaging is already dead — query semantically instead (`[role=tab]`,
+`[aria-selected=true]`). Same reason: never diff `nodes` between runs.
+Transcripts are the diffable artefact. *Within* a single report, though,
+correlate freely: matching selectors across findings identify the same
+element — a node appearing in both a contrast finding and a composite-item
+finding is one element with two stories, and that correlation is often what
+makes an attribution click.
 
 **The rest is raw material for YOUR judgement — this is the valuable part:**
 - `tabwalk.focusOrder` — read it in order and ask: does this sequence make sense?
@@ -157,7 +197,14 @@ ones.
 
 A clean `findings` array is not a clean page: vsr emitting zero findings is
 common on pages with real structural problems (no headings, no landmarks at
-all). The transcript and landmarks are the actual test.
+all). Part of that is axe by design: its page-structure rules
+(`landmark-one-main`, `page-has-heading-one`, `region`) are tagged
+`best-practice`, outside the default WCAG set — verified in axe-core's rule
+metadata. On a first audit, add it to the defaults for deterministic
+structural coverage, in the one command:
+`a11y quick <url> --tags wcag2a,wcag2aa,wcag21a,wcag21aa,wcag22aa,best-practice`
+(`--tags` reaches the axe tier from `quick` and `sweep` too). Either way, the
+transcript and landmarks are the actual test.
 
 ## Whose bug is it? — attributing findings to component libraries
 
@@ -194,6 +241,10 @@ docs tooling) live in `references/` — check for one matching the project's
 stack before starting:
 
 - Laravel + Livewire + Flux UI: [references/laravel-flux.md](references/laravel-flux.md)
+
+A reference's *verified quirks* list is a fast path: a finding that matches a
+documented quirk needs no DOM walk — the reference is the provenance evidence,
+so go straight to the call site and the documented remedy.
 
 No reference for the stack? Apply the general method above — and if you verify
 the library's markers against a rendered page along the way, offer to write

@@ -77,6 +77,22 @@ describe("sweep", () => {
     }
   });
 
+  it("forwards --tags to the axe tier", async () => {
+    // axe's page-structure rules live behind the best-practice tag; broken.html
+    // has no main landmark and no heading, so they only fire when tags reach axe.
+    const report = await runSweep(urlsFor("broken.html"), "0.1.0", {
+      ...FAST,
+      tags: ["best-practice"],
+    });
+    expect(report.summary.findings["landmark-one-main"]).toBeTruthy();
+    expect(report.summary.findings["page-has-heading-one"]).toBeTruthy();
+
+    // And without the override, the default WCAG set stays structural-rule-free.
+    const defaultReport = await runSweep(urlsFor("broken.html"), "0.1.0", FAST);
+    expect(defaultReport.summary.findings["landmark-one-main"]).toBeUndefined();
+    expect(defaultReport.summary.findings["page-has-heading-one"]).toBeUndefined();
+  });
+
   it("renders a summary-first human report", async () => {
     const report = await runSweep(urlsFor("broken.html", "forbidden.html"), "0.1.0", FAST);
     const markdown = renderSweepHuman(report);

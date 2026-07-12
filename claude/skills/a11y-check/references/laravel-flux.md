@@ -61,10 +61,14 @@ flux-stamped. Only the second is the component's.
 - **Arbitrary attributes forward onto components** — the Flux docs' own
   examples pass `aria-label` straight to `flux:button` — so proposing an
   `aria-*` attribute on the component tag is legitimate. But on composed
-  components a forwarded attribute may land on the wrapper rather than the
-  element that needs it; some components route with prefixes instead (e.g.
-  `flux:input` plucks `input:`-prefixed attributes through to the inner
-  `<input>`).
+  components, check *which element* a forwarded attribute lands on. For
+  `flux:input` the answer is the right one: unprefixed attributes (everything
+  except `class`) merge onto the inner `<input>` itself, so a plain
+  `aria-label` needs no prefix (verified against the vendor
+  `input/index.blade.php`, free v2.15.0); `class` stays on the wrapper, and
+  the `input:` / `class:input` prefixes exist to route those exceptions
+  inward. Other composed components may differ — the vendor blade is always
+  the ground truth.
 - **Ground truth for where an attribute lands** is the component's own blade:
   free components in `vendor/livewire/flux/stubs/resources/views/flux/`, pro
   components (date-picker, autocomplete, calendar, …) in
@@ -88,11 +92,25 @@ audit run; upstream may fix any of them, so re-check on major version bumps.
   `flux:heading`s has no headings at all — and vsr won't flag it as a finding;
   only the transcript shows it.
 - **flux-pro's unselected tabs are `text-zinc-400`**
-  (`tab/index.blade.php`) — roughly 2.8:1 on white (computed from the zinc-400
-  hex, not read from axe output) against the 4.5:1 AA requirement, and stock
-  call sites add no classes. If your conventions forbid restyling vendor
-  component internals, this is an upstream report / accepted known-issue, not
-  an app edit.
+  (`tab/index.blade.php`) — axe measures 2.62:1 on white against the 4.5:1 AA
+  requirement, and stock call sites add no classes. If your conventions forbid
+  restyling vendor component internals, this is an upstream report / accepted
+  known-issue, not an app edit.
+- **`flux:tab.group` conscripts every direct child into a tabpanel** (verified
+  v2.15.0: live DOM plus the bundled source — `UITabGroup.walkPanels()` calls
+  `initializePanel()` on each direct child that isn't the `<flux:tabs>` strip,
+  stamping `role="tabpanel"`, a generated `lofi-tab-panel-*` id and
+  `tabindex="-1"`). Hand-written markup placed between the tabs and the panels
+  — a filter row, say — becomes a *phantom tabpanel*: nameless (no
+  `aria-labelledby`) and claimed by no tab, so a screen reader hears four
+  tabpanels under a three-tab tablist. Tab↔panel wiring is by `name`, so the
+  real associations stay correct. In the report this shows as an unnamed
+  `tabpanel` in the vsr transcript / ariaSnapshot with no matching finding.
+  Call-site fix: move non-panel markup out of the tab group entirely — a
+  wrapper doesn't escape (the wrapper gets conscripted instead), and an
+  author-supplied `role` is overwritten (the setter is unconditional; read
+  from source, not live-verified). Upstream-report material:
+  `initializePanel` could skip children without a `name` attribute.
 
 ## Checked vs guessed (July 2026)
 

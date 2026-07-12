@@ -8,6 +8,8 @@ export interface TabStop {
   selector: string;
   href: string;
   tabbable: boolean;
+  /** Role of the closest roving-tabindex composite ancestor (tablist, menu, …), or "". */
+  composite: string;
   /** Set by active(): true when this exact element was focused earlier in the walk. */
   alreadySeen?: boolean;
 }
@@ -21,6 +23,7 @@ export interface Landmark {
 interface PageSnapshot {
   interactive: TabStop[];
   positiveTabindex: TabStop[];
+  namedByPlaceholder: TabStop[];
   landmarks: Landmark[];
 }
 
@@ -54,7 +57,7 @@ const HELPER_SCRIPT = `
     return parts.join(" > ");
   };
 
-  const accessibleName = (el) => {
+  const accessibleName = (el, includePlaceholder = true) => {
     const aria = el.getAttribute("aria-label");
     if (aria) return aria.trim();
     const labelledby = el.getAttribute("aria-labelledby");
@@ -76,7 +79,15 @@ const HELPER_SCRIPT = `
     if (el.tagName === "IMG" && el.alt) return el.alt.trim();
     const text = (el.textContent ?? "").trim();
     if (text) return text;
-    return (el.getAttribute("title") ?? "").trim();
+    const title = (el.getAttribute("title") ?? "").trim();
+    if (title) return title;
+    // Spec last resort (HTML-AAM): a text field's placeholder names it. Keeps
+    // focusOrder names consistent with what axe passes and vsr announces;
+    // includePlaceholder=false reveals fields with no sturdier name than that.
+    if (includePlaceholder && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) {
+      return (el.getAttribute("placeholder") ?? "").trim();
+    }
+    return "";
   };
 
   const inputRoles = {
@@ -107,6 +118,18 @@ const HELPER_SCRIPT = `
   const visible = (el) =>
     el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
 
+  // Composite widgets that manage focus themselves (WAI-ARIA APG): only one item
+  // sits in the Tab order and the rest are reached with arrow keys, so their items
+  // must not be accused of being keyboard-unreachable. Ancestors only — a composite
+  // container that is itself unreachable is still a real finding.
+  const compositeContainer = (el) => {
+    const container = el.parentElement?.closest(
+      '[role="tablist"], [role="menu"], [role="menubar"], [role="radiogroup"], ' +
+        '[role="toolbar"], [role="tree"], [role="treegrid"], [role="grid"], [role="listbox"]',
+    );
+    return container ? container.getAttribute("role") : "";
+  };
+
   const describe = (el) => ({
     role: role(el),
     name: accessibleName(el),
@@ -114,6 +137,7 @@ const HELPER_SCRIPT = `
     selector: buildSelector(el),
     href: el.getAttribute("href") ?? "",
     tabbable: el.tabIndex >= 0,
+    composite: compositeContainer(el),
   });
 
   // Cycle detection must use element IDENTITY, not selectors: duplicate ids or
@@ -140,6 +164,11 @@ const HELPER_SCRIPT = `
       const positiveTabindex = Array.from(document.querySelectorAll("[tabindex]")).filter(
         (el) => Number(el.getAttribute("tabindex")) > 0,
       );
+      const namedByPlaceholder = interactive.filter(
+        (el) =>
+          (el.getAttribute("placeholder") ?? "").trim() !== "" &&
+          accessibleName(el, false) === "",
+      );
       const landmarks = Array.from(
         document.querySelectorAll(
           'header, nav, main, aside, footer, [role="banner"], [role="navigation"], ' +
@@ -150,7 +179,12 @@ const HELPER_SCRIPT = `
         role: role(el),
         label: el.getAttribute("aria-label") ?? "",
       }));
-      return { interactive: interactive.map(describe), positiveTabindex: positiveTabindex.map(describe), landmarks };
+      return {
+        interactive: interactive.map(describe),
+        positiveTabindex: positiveTabindex.map(describe),
+        namedByPlaceholder: namedByPlaceholder.map(describe),
+        landmarks,
+      };
     },
   };
 })();
@@ -196,6 +230,12 @@ export async function runTabwalk(page: Page): Promise<CheckResult> {
   // siblings in the report, it cannot terminate the walk.
   const unreached = snapshot.interactive.filter((el) => !seenSelectors.has(el.selector));
 
+  // A bare role="tab" is treated as composite even without a tablist ancestor:
+  // axe's aria-required-parent already owns that markup error.
+  const isCompositeItem = (el: TabStop) => el.composite !== "" || el.role === "tab";
+  const unreachedComposite = unreached.filter(isCompositeItem);
+  const unreachedPlain = unreached.filter((el) => !isCompositeItem(el));
+
   const findings: Finding[] = [];
   const first = focusOrder[0];
 
@@ -207,7 +247,7 @@ export async function runTabwalk(page: Page): Promise<CheckResult> {
       detail: first
         ? `The first Tab stop is <${first.tag}> "${first.name}" (${first.selector}). Keyboard and screen-reader users must tab through everything before it to reach the content.`
         : "Pressing Tab focused nothing on the page.",
-      nodes: first ? [first.selector] : [],
+      nodes: first ? [{ selector: first.selector }] : [],
     });
   }
 
@@ -218,18 +258,45 @@ export async function runTabwalk(page: Page): Promise<CheckResult> {
       summary: "Elements use positive tabindex values, overriding the natural tab order",
       detail:
         "Positive tabindex forces a bespoke tab order that is fragile and usually diverges from the visual order. Use tabindex=\"0\" (or natural order) instead.",
-      nodes: snapshot.positiveTabindex.map((el) => el.selector),
+      nodes: snapshot.positiveTabindex.map((el) => ({ selector: el.selector })),
     });
   }
 
-  if (unreached.length > 0) {
+  if (unreachedPlain.length > 0) {
     findings.push({
       id: "unreachable-interactive",
       impact: "serious",
       summary: "Interactive elements are never reached by Tab",
       detail:
         "These elements look interactive (links, controls, click handlers or interactive roles) but keyboard focus never lands on them during a full tab walk.",
-      nodes: unreached.map((el) => el.selector),
+      nodes: unreachedPlain.map((el) => ({ selector: el.selector })),
+    });
+  }
+
+  if (unreachedComposite.length > 0) {
+    findings.push({
+      id: "unreachable-composite-item",
+      impact: "minor",
+      summary: "Composite-widget items are not in the Tab order (likely roving tabindex)",
+      detail:
+        "These elements sit inside a roving-tabindex composite (tablist, menu, listbox, …) where only " +
+        "the active item is tabbable and the rest are reached with arrow keys — usually correct per the " +
+        "WAI-ARIA APG. Verify by focusing the active item and pressing the arrow keys; if focus does not " +
+        "move between items, treat this as unreachable-interactive.",
+      nodes: unreachedComposite.map((el) => ({ selector: el.selector })),
+    });
+  }
+
+  if (snapshot.namedByPlaceholder.length > 0) {
+    findings.push({
+      id: "named-by-placeholder-only",
+      impact: "minor",
+      summary: "Form fields are named only by their placeholder",
+      detail:
+        "Placeholder is a legal last resort in the accessible-name computation, so axe passes these — " +
+        "but the name disappears the moment the field has content, and placeholder text is usually " +
+        "low-contrast. Give each field a real <label>, aria-label, or aria-labelledby.",
+      nodes: snapshot.namedByPlaceholder.map((el) => ({ selector: el.selector })),
     });
   }
 
@@ -240,7 +307,7 @@ export async function runTabwalk(page: Page): Promise<CheckResult> {
       summary: "Tab order cycles without ever reaching some tabbable elements",
       detail:
         "Focus revisited an earlier element while tabbable elements remained unvisited — keyboard users are trapped in a loop.",
-      nodes: unreached.filter((el) => el.tabbable).map((el) => el.selector),
+      nodes: unreached.filter((el) => el.tabbable).map((el) => ({ selector: el.selector })),
     });
   }
 

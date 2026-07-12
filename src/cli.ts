@@ -101,13 +101,15 @@ withCommonOptions(
 
 withCommonOptions(
   program.command("quick").description("all quick-mode checks (axe + tabwalk + vsr) in one report"),
-).action(async (url: string, options: CommonOptions) => {
-  await emitReport(url, options, async (page) => ({
-    axe: await runAxe(page),
-    tabwalk: await runTabwalk(page),
-    vsr: await runVsr(page),
-  }));
-});
+)
+  .option("--tags <list>", "comma-separated axe tags overriding the default WCAG set")
+  .action(async (url: string, options: CommonOptions & { tags?: string }) => {
+    await emitReport(url, options, async (page) => ({
+      axe: await runAxe(page, { tags: parseTags(options.tags) }),
+      tabwalk: await runTabwalk(page),
+      vsr: await runVsr(page),
+    }));
+  });
 
 program
   .command("sweep")
@@ -117,7 +119,8 @@ program
   .option("--timeout <ms>", "navigation timeout in milliseconds", "30000")
   .option("--settle <ms>", "extra settle time after load before checking (hydration)", "1000")
   .option("--storage-state <file>", "session state file saved by `a11y login`, for pages behind auth")
-  .action(async (options: CommonOptions & { urls: string }) => {
+  .option("--tags <list>", "comma-separated axe tags overriding the default WCAG set")
+  .action(async (options: CommonOptions & { urls: string; tags?: string }) => {
     const raw = options.urls === "-" ? readFileSync(0, "utf8") : readFileSync(options.urls, "utf8");
     const urls = raw
       .split("\n")
@@ -130,6 +133,7 @@ program
       timeout: Number(options.timeout),
       settle: Number(options.settle),
       storageState: options.storageState,
+      tags: parseTags(options.tags),
     });
     console.log(options.human ? renderSweepHuman(report) : renderJson(report));
   });
@@ -216,6 +220,9 @@ program
         timeout: Number(options.timeout),
       });
       console.log(JSON.stringify(result, null, 2));
+      // A verified login failure means every downstream check would run on a
+      // dead session — that's a tool-health failure, hence non-zero.
+      if (!result.loggedIn) process.exitCode = 1;
     },
   );
 

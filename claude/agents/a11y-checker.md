@@ -32,6 +32,9 @@ a11y login http://localhost:8000/login --save "$SCRATCHPAD/a11y-state.json"
 ```
 
 Then add `--storage-state "$SCRATCHPAD/a11y-state.json"` to every quick run.
+The login output is explicit: `loggedIn: true` means you have a session;
+`loggedIn: false` (non-zero exit, nothing saved) means you don't — report the
+`reason` back rather than running checks that would all bounce.
 **Seeded local-dev credentials only** — never anything production-shaped; if
 that's all you can find, stop and report back instead of proceeding. Never write
 credentials into your report.
@@ -70,13 +73,27 @@ yourself.
 If the CLI exits non-zero the tool itself failed (app not running, bad URL) —
 report that plainly instead of retrying repeatedly or inventing results.
 
+## Debug overlays (Laravel Debugbar and kin)
+
+Check before the page runs: `curl -skL <login-url> | grep -c phpdebugbar`
+(auth-gated apps render the toolbar on the login page too; `-k` because local
+https is usually self-signed). You are a background agent and cannot stop to
+ask anyone, so on a positive hit: run anyway, filter the toolbar out of your
+triage (`.phpdebugbar-*` selectors in findings, plus the tail of the vsr
+transcript and the end of `focusOrder`), and **lead your report with a loud
+caveat** that the scan ran with a debug toolbar active — the user should
+disable it and re-run before fully trusting the results. Never try to disable
+it yourself: config/.env changes are not yours to make.
+
 ## What you report back
 
 Lead with the worst news. For each page:
 
 1. **Findings by impact** (critical → serious → moderate → minor), with the finding
-   `id`, a one-line summary, and the affected `nodes` selectors so the parent
-   session can locate them in the templates.
+   `id`, a one-line summary, and the affected `nodes` so the parent session can
+   locate them in the templates — each node is `{selector, failureSummary?}`,
+   and axe's per-node `failureSummary` (e.g. the measured contrast ratio and
+   colours) is evidence worth quoting verbatim.
 2. **Judgement over the raw material** — this is why you exist, so do the reading:
    - `checks.tabwalk.focusOrder`: walk it in order; flag sequences a keyboard user
      would find baffling even if no rule fired.

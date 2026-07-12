@@ -9,6 +9,7 @@ export interface SweepOptions {
   timeout?: number;
   settle?: number;
   storageState?: string;
+  tags?: string[];
 }
 
 export async function runSweep(
@@ -60,7 +61,7 @@ export async function runSweep(
 
         await settlePage(page, opts.settle);
         const checks: Report["checks"] = {
-          axe: await runAxe(page),
+          axe: await runAxe(page, { tags: opts.tags }),
           tabwalk: await runTabwalk(page),
           vsr: await runVsr(page),
         };

@@ -42,6 +42,10 @@
   <!-- Empty button; aria-labelledby pointing at a missing id -->
   <button aria-labelledby="does-not-exist"></button>
 
+  <!-- Named only by its placeholder: axe passes it (legal last resort), but the
+       name vanishes the moment the field has content -->
+  <p><input id="postcode" type="text" placeholder="Postcode"></p>
+
   <!-- Wrong role outside its required parent -->
   <span role="menuitemcheckbox">Weird role outside a menu</span>
 
