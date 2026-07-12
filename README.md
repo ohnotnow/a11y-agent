@@ -77,7 +77,7 @@ Setup is three steps, once:
 
 What you've just installed:
 
-- **The skill** (`claude/skills/a11y-check/`) teaches a session to run the checks, handle seeded-credential logins, build sweep URL lists from a Laravel router, and read the reports properly: triage the hard findings, then apply judgement to the raw material (tab order, landmarks, the screen-reader transcript) and propose concrete fixes.
+- **The skill** (`claude/skills/a11y-check/`) teaches a session to run the checks, handle seeded-credential logins, build sweep URL lists from a Laravel router, and read the reports properly: triage the hard findings, then apply judgement to the raw material (tab order, landmarks, the screen-reader transcript) and propose concrete fixes. It also teaches *attribution* — working out whether an offending node is the app's own markup or the inside of a third-party UI component, so fixes land at the call site ("add `label` to this `<flux:input>`") and component-internal issues get reported upstream rather than monkey-patched. Stack-specific cheat sheets live in `claude/skills/a11y-check/references/` — Laravel + Livewire + Flux UI ships today; docs for other stacks are welcome, written from verified observation of a rendered page, never from memory.
 - **The sub-agent** (`claude/agents/a11y-checker.md`) does the checking in the background while the main session carries on working, reporting back findings by impact with a ship / fix-first verdict per page. It is read-only towards your app, and it refuses the real-VoiceOver tier — that stays a deliberate foreground act for a human.
 
 The quick checks are deterministic, headless and quiet by design, so an agent can run them mid-session without stealing your screen, your speech output or your keyboard focus.
@@ -122,7 +122,7 @@ Two rules:
 
 Local HTTPS with self-signed or local-CA certificates (Lando's `*.lndo.site`, Valet, etc.) works out of the box: certificate errors are ignored, as befits a local checking tool.
 
-One tip for Laravel apps: run checks with debug overlays disabled (e.g. Laravel Debugbar), otherwise axe dutifully reports contrast violations in the debug toolbar rather than your app.
+One tip for Laravel apps: run checks with debug overlays disabled (e.g. Laravel Debugbar), otherwise axe dutifully reports contrast violations in the debug toolbar rather than your app — and the toolbar's badges pollute the tail of the screen-reader transcript too.
 
 ## Sweeping a whole app
 

@@ -32,6 +32,13 @@ hasn't run, and the same command fixes it.
 
 ## Running checks
 
+**Pre-flight: debug overlays.** Fetch any page of the app once and look for a
+debug toolbar (`curl -s <url> | grep -c phpdebugbar` covers Laravel Debugbar)
+before spending a run. If one is present, stop and ask the user to disable it —
+that's their move (config/.env changes are theirs, not yours) — or agree to
+triage around it. An active toolbar pollutes more than axe's contrast results:
+it fills the tail of the vsr transcript too.
+
 All quick-mode checks, one merged report (the usual choice):
 
 ```bash
@@ -56,6 +63,13 @@ A hard-won rule: if a tabwalk finding looks dramatic (focus trap, swathes of
 unreachable elements), re-run with `--settle 3000` before believing it. Focus
 behaviour during hydration is not what real users experience.
 
+A second one, from a real run: `unreachable-interactive` fires on the ARIA
+roving-tabindex pattern, where being out of the Tab order is *correct*
+behaviour. If the flagged nodes have `role=tab` — or sit inside a tablist,
+menu, radiogroup, or grid — focus the active item in a browser and verify with
+arrow keys before reporting anything as unreachable. `--settle` won't help
+here; it's not a hydration problem.
+
 ## Pages behind a login
 
 Log in once, then pass the saved session to every check:
@@ -77,8 +91,10 @@ a11y quick http://localhost:8000/dashboard --storage-state /tmp/a11y-state.json
 - Save the state file to scratchpad/tmp, never into the app's repo — it holds a
   live session cookie.
 - Unusual form? `--user-field` / `--pass-field` / `--submit` take CSS selectors.
-- Tip: suggest the user disables debug overlays (Laravel Debugbar) for the run,
-  or axe reports the toolbar's contrast instead of the app's.
+- The saved state file is a standard Playwright storage state, so it plugs
+  straight into playwright-cli (`state-load`) when a finding needs hands-on
+  verification — no second login needed. Findings *will* need hands-on
+  verification (see the roving-tabindex rule above).
 
 Exit codes mean tool health, not page quality: 0 = checks ran (findings are in the
 JSON); non-zero = the tool itself failed (app not running, bad URL). Report tool
@@ -123,6 +139,11 @@ array: stable `id`, `impact` (critical / serious / moderate / minor), `summary`,
 - tabwalk: `no-skip-link`, `positive-tabindex`, `unreachable-interactive`, `focus-trap`
 - vsr: `bare-control` (a control announced as a bare role with no name)
 
+But triage node-by-node, never finding-by-finding: a single axe finding can mix
+vendor-overlay noise (`.phpdebugbar-*` badges) with genuine app nodes in one
+`nodes` list, and dismissing the finding wholesale silently discards the real
+ones.
+
 **The rest is raw material for YOUR judgement — this is the valuable part:**
 - `tabwalk.focusOrder` — read it in order and ask: does this sequence make sense?
   A technically-valid-but-insane order is a finding the rule engine can't emit.
@@ -133,6 +154,53 @@ array: stable `id`, `impact` (critical / serious / moderate / minor), `summary`,
   gets announced are all real problems axe cannot see.
 - `tabwalk.ariaSnapshot` — the accessibility tree as YAML, for digging into a
   specific oddity.
+
+A clean `findings` array is not a clean page: vsr emitting zero findings is
+common on pages with real structural problems (no headings, no landmarks at
+all). The transcript and landmarks are the actual test.
+
+## Whose bug is it? — attributing findings to component libraries
+
+Before proposing any fix, work out who owns the offending markup. A finding six
+divs deep inside a third-party date-picker is not something the user can fix
+directly — telling them to re-plumb vendor internals is worse than noise, it's
+an invitation to monkey-patch vendor markup. Attribution is a three-step, and
+every step needs evidence, not vibes:
+
+1. **Provenance — whose markup is this?** Component libraries usually stamp
+   recognisable markers on their rendered output (data attributes, custom
+   elements, class prefixes). Resolve the finding's node selector against the
+   live page and walk its ancestors looking for markers — the report's selector
+   string alone won't necessarily mention them. No marker evidence? Fall back
+   to source: find the template that renders the page and check whether the
+   element is hand-written or sits inside a component tag.
+2. **Fault — misused or broken?** A finding on a component's node can still be
+   the app's bug: an input announced as a bare textbox because nobody passed
+   the label prop is the call site's fault, not the library's. Read the call
+   site in the app's own template before blaming the component.
+3. **Remedy — what's the actionable fix?** If the component's documented API
+   offers a prop or forwarded attribute that fixes it, report that with
+   file:line ("add `label="Filter jobs"` to the `<flux:input>` at
+   `home-page.blade.php:18`"). If it doesn't, report an upstream component
+   issue — keep it in the report in its own section, framed as "known /
+   consider a workaround or an upstream report", never as a to-do for the user.
+
+The question is "who should fix this?", not "whose directory is the file in" —
+some libraries (shadcn/ui, for one) vendor their code into the app's repo, so
+the user owns the file without having written it.
+
+Stack-specific tells (marker formats, template and vendor-source locations,
+docs tooling) live in `references/` — check for one matching the project's
+stack before starting:
+
+- Laravel + Livewire + Flux UI: [references/laravel-flux.md](references/laravel-flux.md)
+
+No reference for the stack? Apply the general method above — and if you verify
+the library's markers against a rendered page along the way, offer to write
+those observations up as a new reference (using Django with some component
+library? → `references/django-thing.md`). Reference docs are written from
+verified observation only, never from memory: an unverified cheat sheet is a
+horoscope with a filename.
 
 ## Feeding findings back
 
