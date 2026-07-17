@@ -17,6 +17,7 @@ a11y-agent is a deterministic CLI that runs an axe-core scan, a keyboard tab-ord
 - [The report](#the-report)
 - [Quick mode vs full-fat mode](#quick-mode-vs-full-fat-mode)
 - [Development](#development)
+- [You might also be interested in](#you-might-also-be-interested-in)
 
 ## Why
 
@@ -250,3 +251,8 @@ The fixtures in `tests/fixtures/` are the contract: `broken.html` seeds one of e
 If you add, rename or re-tier a finding id, grep `claude/` (and this README) for the old one — the skill and sub-agent document ids in prose, and they go stale silently.
 
 CI (GitHub Actions, ubuntu) runs the full build and test suite on every push. The virtual screen reader is a pure simulator, so even the screen-reader tier runs happily headless on Linux.
+
+## You might also be interested in
+
+- [ux-agent](https://github.com/ohnotnow/ux-agent) — a sibling toolkit where the agent *uses* your app the way a person would: bug-reproduction videos, user-guide videos that re-film themselves when the UI changes, and cold usability probes by a context-free sub-agent that isn't allowed to peek at your code.
+- [agentic-stuff](https://github.com/ohnotnow/agentic-stuff) — the wider collection of Claude Code skills and agents this tool grew up alongside (Laravel/Livewire-leaning), including a quality-gate review stack that can spawn this repo's background checker as part of a post-feature check.
