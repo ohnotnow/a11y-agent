@@ -2,9 +2,18 @@
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import type { Page } from "playwright";
-import { withPage } from "./browser.js";
-import { renderHuman, renderJson, renderSweepHuman, type Report } from "./report.js";
-import { runSweep } from "./sweep.js";
+import { withPage, withPageSchemes } from "./browser.js";
+import {
+  renderHuman,
+  renderJson,
+  renderMultiSweepHuman,
+  renderSchemeHuman,
+  renderSweepHuman,
+  summariseSchemeChecks,
+  type MultiSchemeReport,
+  type Report,
+} from "./report.js";
+import { runSweep, runSweepBoth } from "./sweep.js";
 import { runAxe } from "./checks/axe.js";
 import { runLogin } from "./login.js";
 import { runSr, type SrBrowser } from "./checks/sr.js";
@@ -20,6 +29,16 @@ interface CommonOptions {
   timeout: string;
   settle: string;
   storageState?: string;
+  colorScheme?: string;
+}
+
+// Default is "both": an a11y tool should check both themes unless told otherwise.
+// A single scheme (light/dark) is for zeroing in on one fix, or self-documenting
+// intent in a skill or guide.
+function parseColorScheme(value: string | undefined): "light" | "dark" | "both" {
+  const scheme = value ?? "both";
+  if (scheme === "light" || scheme === "dark" || scheme === "both") return scheme;
+  throw new Error(`unsupported --color-scheme "${value}" (use light, dark or both)`);
 }
 
 async function emitReport(
@@ -27,23 +46,39 @@ async function emitReport(
   options: CommonOptions,
   collect: (page: Page) => Promise<Report["checks"]>,
 ): Promise<void> {
-  const checks = await withPage(
-    url,
-    {
-      timeout: Number(options.timeout),
-      settle: Number(options.settle),
-      storageState: options.storageState,
-    },
-    collect,
-  );
-  const report: Report = {
+  const scheme = parseColorScheme(options.colorScheme);
+  const base = {
+    timeout: Number(options.timeout),
+    settle: Number(options.settle),
+    storageState: options.storageState,
+  };
+
+  // A single pinned scheme keeps the classic single-checks report shape.
+  if (scheme !== "both") {
+    const checks = await withPage(url, { ...base, colorScheme: scheme }, collect);
+    const report: Report = {
+      tool: "a11y",
+      version: pkg.version,
+      url,
+      generatedAt: new Date().toISOString(),
+      colorScheme: scheme,
+      checks,
+    };
+    console.log(options.human ? renderHuman(report) : renderJson(report));
+    return;
+  }
+
+  const schemes = await withPageSchemes(url, base, ["light", "dark"], collect);
+  const report: MultiSchemeReport = {
     tool: "a11y",
     version: pkg.version,
     url,
     generatedAt: new Date().toISOString(),
-    checks,
+    colorScheme: "both",
+    schemes,
+    schemeSummary: summariseSchemeChecks(schemes),
   };
-  console.log(options.human ? renderHuman(report) : renderJson(report));
+  console.log(options.human ? renderSchemeHuman(report) : renderJson(report));
 }
 
 function parseTags(list?: string): string[] | undefined {
@@ -70,7 +105,8 @@ function withCommonOptions(cmd: Command): Command {
     .option("--human", "render the report as markdown instead of JSON")
     .option("--timeout <ms>", "navigation timeout in milliseconds", "30000")
     .option("--settle <ms>", "extra settle time after load before checking (hydration)", "1000")
-    .option("--storage-state <file>", "session state file saved by `a11y login`, for pages behind auth");
+    .option("--storage-state <file>", "session state file saved by `a11y login`, for pages behind auth")
+    .option("--color-scheme <mode>", "theme to render: light, dark or both", "both");
 }
 
 withCommonOptions(
@@ -120,6 +156,7 @@ program
   .option("--settle <ms>", "extra settle time after load before checking (hydration)", "1000")
   .option("--storage-state <file>", "session state file saved by `a11y login`, for pages behind auth")
   .option("--tags <list>", "comma-separated axe tags overriding the default WCAG set")
+  .option("--color-scheme <mode>", "theme to render: light, dark or both", "both")
   .action(async (options: CommonOptions & { urls: string; tags?: string }) => {
     const raw = options.urls === "-" ? readFileSync(0, "utf8") : readFileSync(options.urls, "utf8");
     const urls = raw
@@ -129,12 +166,21 @@ program
     if (urls.length === 0) {
       throw new Error("no URLs found in the list");
     }
-    const report = await runSweep(urls, pkg.version, {
+    const scheme = parseColorScheme(options.colorScheme);
+    const base = {
       timeout: Number(options.timeout),
       settle: Number(options.settle),
       storageState: options.storageState,
       tags: parseTags(options.tags),
-    });
+    };
+
+    if (scheme === "both") {
+      const report = await runSweepBoth(urls, pkg.version, base);
+      console.log(options.human ? renderMultiSweepHuman(report) : renderJson(report));
+      return;
+    }
+
+    const report = await runSweep(urls, pkg.version, { ...base, colorScheme: scheme });
     console.log(options.human ? renderSweepHuman(report) : renderJson(report));
   });
 

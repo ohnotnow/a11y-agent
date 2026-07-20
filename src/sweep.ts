@@ -3,13 +3,23 @@ import { settlePage } from "./browser.js";
 import { runAxe } from "./checks/axe.js";
 import { runTabwalk } from "./checks/tabwalk.js";
 import { runVsr } from "./checks/vsr.js";
-import type { Report, SweepPage, SweepReport, SweepSummaryEntry } from "./report.js";
+import {
+  combineSweepSummaries,
+  SCHEMES,
+  type MultiSchemeSweepReport,
+  type Report,
+  type Scheme,
+  type SweepPage,
+  type SweepReport,
+  type SweepSummaryEntry,
+} from "./report.js";
 
 export interface SweepOptions {
   timeout?: number;
   settle?: number;
   storageState?: string;
   tags?: string[];
+  colorScheme?: Scheme;
 }
 
 export async function runSweep(
@@ -27,6 +37,7 @@ export async function runSweep(
       bypassCSP: true,
       ignoreHTTPSErrors: true,
       storageState: opts.storageState,
+      colorScheme: opts.colorScheme,
     });
 
     for (const url of urls) {
@@ -80,6 +91,28 @@ export async function runSweep(
     generatedAt: new Date().toISOString(),
     pages,
     summary: summarise(pages),
+  };
+}
+
+// Sweep every URL under both themes: two full single-scheme sweeps, kept intact,
+// plus a combined summary marking which theme(s) each finding hit. Routing is
+// theme-independent, so skips resolve identically in each pass.
+export async function runSweepBoth(
+  urls: string[],
+  version: string,
+  opts: SweepOptions = {},
+): Promise<MultiSchemeSweepReport> {
+  const schemes: Partial<Record<Scheme, SweepReport>> = {};
+  for (const scheme of SCHEMES) {
+    schemes[scheme] = await runSweep(urls, version, { ...opts, colorScheme: scheme });
+  }
+  return {
+    tool: "a11y",
+    version,
+    generatedAt: new Date().toISOString(),
+    colorScheme: "both",
+    schemes,
+    summary: combineSweepSummaries(schemes),
   };
 }
 

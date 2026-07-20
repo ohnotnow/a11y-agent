@@ -1,3 +1,9 @@
+/** A colour scheme actually rendered and checked (not the "both" request). */
+export type Scheme = "light" | "dark";
+
+/** Light before dark — keeps every schemes[] array in a stable, readable order. */
+export const SCHEMES: Scheme[] = ["light", "dark"];
+
 export interface FindingNode {
   selector: string;
   /** Per-node evidence, e.g. axe's measured contrast ratio and colours. */
@@ -23,12 +29,53 @@ export interface Report {
   version: string;
   url: string;
   generatedAt: string;
+  /** Which single scheme was rendered, when the run pinned one. Absent on legacy callers. */
+  colorScheme?: Scheme;
   checks: {
     axe?: CheckResult;
     tabwalk?: CheckResult;
     vsr?: CheckResult;
     sr?: CheckResult;
   };
+}
+
+/** finding-id -> which colour scheme(s) it appeared in (light before dark). */
+export interface SchemeSummaryEntry {
+  impact?: string;
+  schemes: Scheme[];
+}
+
+/**
+ * A single-page report run under both themes: each scheme's full checks kept
+ * intact (lossless — no cross-scheme node diffing, whose selectors are per-render
+ * anyway), plus a by-id summary answering "which theme(s) is this a problem in?".
+ */
+export interface MultiSchemeReport {
+  tool: "a11y";
+  version: string;
+  url: string;
+  generatedAt: string;
+  colorScheme: "both";
+  schemes: Partial<Record<Scheme, Report["checks"]>>;
+  schemeSummary: Record<string, SchemeSummaryEntry>;
+}
+
+/** Collapse a page's per-scheme checks into a by-finding-id "which schemes?" map. */
+export function summariseSchemeChecks(
+  schemes: Partial<Record<Scheme, Report["checks"]>>,
+): Record<string, SchemeSummaryEntry> {
+  const summary: Record<string, SchemeSummaryEntry> = {};
+  for (const scheme of SCHEMES) {
+    const checks = schemes[scheme];
+    if (!checks) continue;
+    for (const check of Object.values(checks)) {
+      for (const finding of check?.findings ?? []) {
+        const entry = (summary[finding.id] ??= { impact: finding.impact, schemes: [] });
+        if (!entry.schemes.includes(scheme)) entry.schemes.push(scheme);
+      }
+    }
+  }
+  return summary;
 }
 
 export interface SweepPage {
@@ -56,7 +103,55 @@ export interface SweepReport {
   };
 }
 
-export function renderJson(report: Report | SweepReport): string {
+export interface MultiSchemeSweepSummaryEntry {
+  impact?: string;
+  count: number;
+  pages: string[];
+  schemes: Scheme[];
+}
+
+/**
+ * A sweep run under both themes: each scheme's full single-scheme sweep kept
+ * intact, plus a combined summary keyed by finding-id carrying which theme(s)
+ * and which pages each finding hit.
+ */
+export interface MultiSchemeSweepReport {
+  tool: "a11y";
+  version: string;
+  generatedAt: string;
+  colorScheme: "both";
+  schemes: Partial<Record<Scheme, SweepReport>>;
+  summary: {
+    findings: Record<string, MultiSchemeSweepSummaryEntry>;
+    skipped: Array<{ url: string; reason: string }>;
+  };
+}
+
+/** Merge per-scheme sweep summaries into one by-id map tagged with schemes + pages. */
+export function combineSweepSummaries(
+  sweeps: Partial<Record<Scheme, SweepReport>>,
+): MultiSchemeSweepReport["summary"] {
+  const findings: Record<string, MultiSchemeSweepSummaryEntry> = {};
+  for (const scheme of SCHEMES) {
+    const sweep = sweeps[scheme];
+    if (!sweep) continue;
+    for (const [id, entry] of Object.entries(sweep.summary.findings)) {
+      const combined = (findings[id] ??= { impact: entry.impact, count: 0, pages: [], schemes: [] });
+      if (!combined.schemes.includes(scheme)) combined.schemes.push(scheme);
+      for (const pageUrl of entry.pages) {
+        if (!combined.pages.includes(pageUrl)) combined.pages.push(pageUrl);
+      }
+      combined.count = combined.pages.length;
+    }
+  }
+  // The skip set is routing-driven and identical across schemes; take the first run's.
+  const first = SCHEMES.map((scheme) => sweeps[scheme]).find(Boolean);
+  return { findings, skipped: first ? first.summary.skipped : [] };
+}
+
+export function renderJson(
+  report: Report | SweepReport | MultiSchemeReport | MultiSchemeSweepReport,
+): string {
   return JSON.stringify(report, null, 2);
 }
 
@@ -229,6 +324,86 @@ export function renderSweepHuman(sweep: SweepReport): string {
     for (const finding of findings) {
       lines.push(`- **${finding.id}** (${finding.impact ?? "info"}): ${finding.summary}`);
     }
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
+// Both-themes single page: the scheme summary first (which theme is each problem
+// in?), then each theme's full report via the single-scheme renderer.
+export function renderSchemeHuman(report: MultiSchemeReport): string {
+  const lines: string[] = [];
+  lines.push(`# a11y report — ${report.url}`);
+  lines.push("");
+  lines.push(`Generated ${report.generatedAt} by a11y v${report.version}. Colour schemes: light + dark.`);
+
+  lines.push("", "## Scheme summary", "");
+  const entries = Object.entries(report.schemeSummary).sort(
+    ([, a], [, b]) => impactRank(a.impact) - impactRank(b.impact),
+  );
+  if (entries.length === 0) {
+    lines.push("No findings in either theme.");
+  } else {
+    lines.push("| Finding | Impact | Themes |", "|---|---|---|");
+    for (const [id, entry] of entries) {
+      lines.push(`| ${id} | ${entry.impact ?? "info"} | ${entry.schemes.join(", ")} |`);
+    }
+  }
+
+  for (const scheme of SCHEMES) {
+    const checks = report.schemes[scheme];
+    if (!checks) continue;
+    lines.push("", `# ${scheme} theme`);
+    lines.push(
+      renderHuman({
+        tool: "a11y",
+        version: report.version,
+        url: report.url,
+        generatedAt: report.generatedAt,
+        colorScheme: scheme,
+        checks,
+      }),
+    );
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
+// Both-themes sweep: combined summary (finding-id -> impact, pages, themes)
+// first, then each theme's full sweep via the single-scheme renderer.
+export function renderMultiSweepHuman(sweep: MultiSchemeSweepReport): string {
+  const lines: string[] = [];
+  lines.push("# a11y sweep — light + dark");
+  lines.push("");
+  lines.push(`Generated ${sweep.generatedAt} by a11y v${sweep.version}.`);
+
+  lines.push("", "## Summary", "");
+  const entries = Object.entries(sweep.summary.findings).sort(
+    ([, a], [, b]) => impactRank(a.impact) - impactRank(b.impact) || b.count - a.count,
+  );
+  if (entries.length === 0) {
+    lines.push("No findings on any checked page, in either theme.");
+  } else {
+    lines.push("| Finding | Impact | Pages | Themes |", "|---|---|---|---|");
+    for (const [id, entry] of entries) {
+      lines.push(`| ${id} | ${entry.impact ?? "info"} | ${entry.count} | ${entry.schemes.join(", ")} |`);
+    }
+  }
+
+  if (sweep.summary.skipped.length > 0) {
+    lines.push("", "## Skipped", "");
+    for (const skip of sweep.summary.skipped) {
+      lines.push(`- ${skip.url} — ${skip.reason}`);
+    }
+  }
+
+  for (const scheme of SCHEMES) {
+    const schemeSweep = sweep.schemes[scheme];
+    if (!schemeSweep) continue;
+    lines.push("", `# ${scheme} theme`);
+    lines.push(renderSweepHuman(schemeSweep));
   }
 
   lines.push("");
