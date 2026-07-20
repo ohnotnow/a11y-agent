@@ -172,6 +172,113 @@ Pages answering non-2xx or bouncing to a login page are auto-skipped with a reas
 `summary.skipped` — check that list to see what the sweep couldn't reach (expired
 session, missing sample id) before drawing conclusions.
 
+## Journeys — auditing transitions, not just page loads
+
+The checks above see a page as it loads. A journey audits what happens *while
+it is used*: announcements, focus and visibility at each step of a real flow —
+"filter the list, open the edit modal, submit invalid data, correct it, save".
+The gnarliest screen-reader failures exist only in those transitions (a modal
+that opens without a word, a validation error rendered off-screen, focus
+dropped on the floor after a Livewire morph), and no load-time tier can see
+them.
+
+The instrument is a pair of eval-ready files in the clone's `assets/`
+(`observer-arm.js`, `observer-read.js` — built by `npm run setup`/`build`; find
+the clone path per **Finding the tool** above). Arm switches on in-page
+watchers; the interaction happens for real; read switches them off and returns
+JSON. **The read-back is raw observations, not verdicts** — the judgement half
+is yours, below.
+
+### Driving a journey
+
+Interactions must be real, trusted input through playwright-cli commands
+(`click`/`fill`/`press`) — never synthetic in-page JS clicks, which don't move
+focus the way a user does. Start playwright-cli from your scratchpad (the
+daemon adopts the cwd of the first shell that opens the browser, and scatters
+its artefacts there); for local https, put a `.playwright/cli.config.json` with
+`{"browser": {"contextOptions": {"ignoreHTTPSErrors": true}}}` in that cwd
+first. Open, load the session saved by `a11y login`, and go:
+
+```bash
+playwright-cli open about:blank
+playwright-cli state-load /tmp/a11y-state.json
+playwright-cli goto http://localhost:8000/admin/teams
+```
+
+Then, per meaningful user action ("stage"):
+
+```bash
+playwright-cli snapshot        # fresh element refs — refs and selectors die on every re-render
+playwright-cli eval "$(cat "$A11Y_DIR/assets/observer-arm.js")"
+playwright-cli click e42       # the real interaction
+playwright-cli eval "() => new Promise(r => setTimeout(() => r('settled'), 1500))"   # hydration settle; 1.2-2s suits Livewire
+playwright-cli eval "$(cat "$A11Y_DIR/assets/observer-read.js")" > stage-3-readback.json
+```
+
+Screenshot the stage with the element that matters ringed — big obvious
+"look here" — then clean up before the next stage:
+
+```bash
+playwright-cli eval "$(cat "$A11Y_DIR/assets/highlight.js")" e57
+playwright-cli screenshot
+playwright-cli eval "$(cat "$A11Y_DIR/assets/unhighlight.js")"
+```
+
+### Reading a stage's read-back
+
+Every class below was caught for real on the first journey ever run (a
+Laravel/Livewire/Flux app, July 2026):
+
+- **Silent update** — content in `appearedVisible` (or announced regions), but
+  `announcements: []`. A screen-reader user heard nothing. Real example: typing
+  in a filter re-rendered 4 result rows while 14 live regions sat idle — no "4
+  results", pure silence.
+- **Focus lost** — `activeElementNow` is `body…` after an action: the keyboard
+  user's position was destroyed. It happened TWICE in one journey (modal open,
+  and again after a Livewire morph re-rendered the focused button) — treat it
+  as a common defect class in morphing frameworks, and check `focusTrail` for
+  where focus briefly landed on the way down.
+- **Feedback off-screen** — an announcement or appeared node with
+  `inViewport: false`. The canonical catch: two validation errors, one beside
+  the submit button, the other at `y=-408` — above the fold of a scrolled
+  modal. The sighted user sees one error, fixes it, gets rejected again;
+  pair with `announcements` to tell each user type's story (announced but
+  stranded vs seen but partial). Standard remedy to propose: the GOV.UK error
+  summary — rendered at the top of the form, focus moved to it, linking each
+  error to its field. It fixes sighted, magnifier and screen-reader users in
+  one move.
+- **Unannounced dialog** — `openDialog` present, `announcements` empty, and
+  `activeElementNow` outside it. Check `isModal` before judging: `showModal()`
+  with focus on body is a real failure; a non-modal disclosure is a different
+  conversation.
+- **Native validation** — nothing in the DOM moved, but `invalidFields` lists
+  a field with its `validationMessage` (browser bubbles never enter the DOM;
+  the read-back probes `:invalid` for you). Not a defect by default —
+  judgement material: bubbles show one field at a time and vanish on blur.
+- **What passed** — report it. Escape returning focus to the trigger that
+  opened a modal is worth a sentence; a journey report is a portrait, not a
+  charge sheet.
+
+`revealed`-via entries in `appearedVisible` can carry class/style churn noise
+from morphing frameworks — they are leads, not verdicts.
+
+### Reporting a journey
+
+Stage by stage, narrative: what the user did, what the observer saw (quote the
+numbers — "error icon at y=-408, viewport 800"), the experience per user type,
+the screenshot. Findings ranked by impact at the end, with fixes at the call
+site — the attribution method below applies to journey findings unchanged.
+
+### Journey hygiene
+
+- Seeded local-dev credentials and never anything production-shaped — exactly
+  as for every other check.
+- Prefer journeys that create nothing: a submit carrying a duplicate of a
+  seeded unique value exercises the server-side validation path with nothing
+  written, and Escape discards the form.
+- End honest: `playwright-cli close`, then state what the journey changed in
+  the app — or that it changed nothing, and why you know.
+
 ## Reading the report
 
 **Shape first — mind the colour scheme (default `both`).** A `both` run nests each

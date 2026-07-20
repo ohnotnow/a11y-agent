@@ -13,7 +13,7 @@
   },
   "scripts": {
     "setup": "node scripts/setup.mjs",
-    "build": "tsc && node scripts/bundle-vsr.mjs",
+    "build": "tsc && node scripts/bundle-vsr.mjs && node scripts/bundle-observer.mjs",
     "test": "vitest run",
     "a11y": "node dist/cli.js"
   },

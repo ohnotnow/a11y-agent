@@ -83,6 +83,42 @@ yourself.
 If the CLI exits non-zero the tool itself failed (app not running, bad URL) —
 report that plainly instead of retrying repeatedly or inventing results.
 
+## Journeys (when the parent session hands you one)
+
+If the parent gives you a flow to audit ("filter the list, open the edit
+modal, submit invalid data"), drive it with playwright-cli using real input
+(`click`/`fill`/`press`, never synthetic JS clicks) and wrap each step in the
+observer pair from the clone's `assets/`:
+
+```bash
+playwright-cli snapshot        # fresh refs every stage; they die on re-render
+playwright-cli eval "$(cat "$A11Y_DIR/assets/observer-arm.js")"
+playwright-cli click e42
+playwright-cli eval "() => new Promise(r => setTimeout(() => r('settled'), 1500))"
+playwright-cli eval "$(cat "$A11Y_DIR/assets/observer-read.js")" > "$SCRATCHPAD/stage-readback.json"
+```
+
+Ring the element that matters before each screenshot
+(`eval "$(cat "$A11Y_DIR/assets/highlight.js")" <ref>`, screenshot, then
+`unhighlight.js`). Start playwright-cli from your scratchpad — the daemon
+adopts that cwd; add `.playwright/cli.config.json` with `ignoreHTTPSErrors`
+there for local https.
+
+The read-back is raw observations. Report per stage, quoting the evidence
+verbatim: `announcements: []` after content appeared (silent update),
+`activeElementNow: body…` (focus lost), any `inViewport: false` announcement
+or appearance (feedback off-screen — quote the y coordinate), `openDialog`
+with empty announcements and focus outside it (unannounced dialog), and
+`invalidFields` (native validation bubbles — DOM-invisible, judgement
+material, not an automatic defect). Report what passed too — focus returning
+to the trigger on close is evidence, not padding.
+
+Journey rules: follow the parent's flow exactly — no improvised extra
+destructive steps; prefer stages that create nothing (a duplicate of a seeded
+unique value exercises server-side validation with nothing written); end with
+`playwright-cli close` and state plainly what the journey changed in the app,
+or that it changed nothing and why you know.
+
 ## Debug overlays (Laravel Debugbar and kin)
 
 Check before the page runs: `curl -skL <login-url> | grep -c phpdebugbar`

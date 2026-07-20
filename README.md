@@ -217,6 +217,28 @@ Reading it:
 
 Exit codes mean tool health, not page quality: **0** when the checks ran (however bad the findings), non-zero only when the tool itself failed (unreachable URL, crash).
 
+## Journey audits — transitions, not just page loads
+
+Everything above audits pages as they load. The gnarliest accessibility
+failures happen *while the page is used*: the modal that opens without a word
+to a screen reader, the validation error rendered off-screen in a scrolled
+form, keyboard focus dropped on the floor after a re-render. So the repo also
+ships an **interaction observer** — a pair of injectable watchers
+(`assets/observer-arm.js` / `observer-read.js`, plus a screenshot highlight
+ring) that an agent wraps around each real step of a flow and reads back:
+what was announced (or wasn't), where focus went, and whether what appeared
+was actually on screen.
+
+This is an agent-driven audit, not a CLI command — ask for it:
+
+> *"Run an a11y journey on the new-server flow: filter the list, open the
+> modal, submit it invalid, and tell me what each kind of user experiences."*
+
+The skill teaches the whole routine (driving real input through
+playwright-cli, arming/reading per stage, judging the read-back, screenshots
+with the offending element ringed). `quick`, `sweep` and the rest are
+unchanged — journeys sit alongside them, not instead of them.
+
 ## Quick mode vs full-fat mode
 
 Everything above is **quick mode**: simulated, deterministic, background-safe. It answers *"did we build the semantics correctly per spec?"*.
@@ -247,11 +269,11 @@ a11y sr http://localhost:8000/dashboard --foreground
 ## Development
 
 ```
-npm test          # vitest against two local fixture pages (deliberately good / deliberately broken)
-npm run build     # tsc + bundle the virtual screen reader for in-page injection
+npm test          # vitest against local fixture pages (deliberately good / deliberately broken)
+npm run build     # tsc + bundle the virtual screen reader and the interaction observer for in-page injection
 ```
 
-The fixtures in `tests/fixtures/` are the contract: `broken.html` seeds one of every defect the checks must catch, `good.html` must stay clean, including against WCAG 2.2's newer rules (its nav links needed 24px touch targets for 2.5.8 Target Size, which the default rule set caught immediately).
+The fixtures in `tests/fixtures/` are the contract: `broken.html` seeds one of every defect the checks must catch, `journey-broken.html` seeds the transition defects the interaction observer must catch (silent update, focus-dropping modal, off-screen validation error, native-validation bubble), and `good.html` must stay clean, including against WCAG 2.2's newer rules (its nav links needed 24px touch targets for 2.5.8 Target Size, which the default rule set caught immediately).
 
 If you add, rename or re-tier a finding id, grep `claude/` (and this README) for the old one — the skill and sub-agent document ids in prose, and they go stale silently.
 
