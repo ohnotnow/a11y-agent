@@ -47,6 +47,16 @@ For each page, quick mode — all three tiers, one JSON report to stdout:
 a11y quick http://localhost:8000/the/page
 ```
 
+Both `quick` and `sweep` default to checking each page under **light and dark** —
+an a11y tool should look at both themes. That changes the JSON shape: the tiers
+move under `schemes.light` / `schemes.dark`, and a by-finding-id summary
+(`schemeSummary` on a quick report; a `schemes: [...]` field on each
+`summary.findings` entry on a sweep) tells you which theme(s) each finding is in
+(`["light"]`, `["dark"]`, or `["light","dark"]`). Contrast is the only tier that
+differs by theme; focus order, landmarks and the transcript come back identical, so
+read one theme's. Pin `--color-scheme light` (or `dark`) if you ever need the
+classic single-theme shape.
+
 For many pages (a whole-app pass), write the URLs to a scratchpad file (one per
 line) and use sweep — one browser session, one report with a cross-page
 `summary.findings` map that shows recurring patterns:
@@ -93,13 +103,17 @@ Lead with the worst news. For each page:
    `id`, a one-line summary, and the affected `nodes` so the parent session can
    locate them in the templates — each node is `{selector, failureSummary?}`,
    and axe's per-node `failureSummary` (e.g. the measured contrast ratio and
-   colours) is evidence worth quoting verbatim.
-2. **Judgement over the raw material** — this is why you exist, so do the reading:
-   - `checks.tabwalk.focusOrder`: walk it in order; flag sequences a keyboard user
-     would find baffling even if no rule fired.
-   - `checks.tabwalk.landmarks`: empty = no structural waypoints; say so.
-   - `checks.vsr.transcript`: read it top to bottom and answer honestly: "would I
-     want to navigate this page blind?" Quote the worst moments verbatim.
+   colours) is evidence worth quoting verbatim. Take the list from the scheme
+   summary and say which theme(s) each finding is in — a `color-contrast` may be
+   light-only or dark-only, and that changes the fix.
+2. **Judgement over the raw material** — this is why you exist, so do the reading.
+   Under the both-theme default these sit under `schemes.<theme>`; focus order,
+   landmarks and transcript are identical across themes, so read one (light's):
+   - `schemes.light.tabwalk.focusOrder`: walk it in order; flag sequences a keyboard
+     user would find baffling even if no rule fired.
+   - `schemes.light.tabwalk.landmarks`: empty = no structural waypoints; say so.
+   - `schemes.light.vsr.transcript`: read it top to bottom and answer honestly: "would
+     I want to navigate this page blind?" Quote the worst moments verbatim.
 3. **A short verdict per page**: ship / fix-first / burn-it-down, with the one or
    two changes that would matter most.
 

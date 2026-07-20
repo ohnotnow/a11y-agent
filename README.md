@@ -108,8 +108,11 @@ Flags:
 | `--timeout <ms>` | all | Navigation timeout (default 30000) |
 | `--settle <ms>` | all | Extra settle time after load before checking (default 1000). Livewire/Alpine pages re-wire focus during hydration, and measuring too early produces false findings |
 | `--tags <list>` | `axe`, `quick`, `sweep` | Override the default WCAG tag set for the axe tier, e.g. `--tags wcag2a,wcag2aa` for strict 2.0/2.1-only runs |
+| `--color-scheme <light\|dark\|both>` | `axe`, `tabwalk`, `vsr`, `quick`, `sweep` | Theme(s) to render. Default `both`. See [The report](#the-report) for the both-mode shape |
 
 The default axe tags are `wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa`.
+
+By default every checking command renders each page **twice — light and dark** (`--color-scheme both`). The headless browser follows `prefers-color-scheme: light` and does not inherit your Mac's theme, so a single-theme run silently skips the other — and `color-contrast` is the finding that actually differs between them (a light-palette failure often passes in dark). Everything else is structural and identical in both. Pin `--color-scheme light` or `dark` to check just one.
 
 ## Pages behind a login
 
@@ -204,6 +207,8 @@ JSON to stdout by default (the `--human` markdown renders the same data):
   }
 }
 ```
+
+**Colour schemes.** The shape above is a single theme's. By default every run checks **both** (`--color-scheme both`): each theme's result is nested under `schemes.light` / `schemes.dark`, and a by-finding-id summary — `schemeSummary` on a page report, a `schemes: [...]` field on each `summary.findings` entry on a sweep — marks which theme(s) each finding is in (`["light"]`, `["dark"]`, or `["light","dark"]`). Only `color-contrast` really differs between themes. Pin `--color-scheme light` or `dark` for exactly the single-theme shape shown here, plus a `colorScheme` field naming the theme.
 
 Reading it:
 

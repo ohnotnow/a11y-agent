@@ -71,6 +71,31 @@ load; raise it for slow-hydrating pages before trusting a surprising tabwalk
 finding), and on `axe`, `quick` and `sweep`: `--tags <list>` to override the
 default WCAG 2.1 AA + 2.2 AA rule set for the axe tier (e.g. `--tags wcag2a,wcag2aa`).
 
+### Light and dark mode (`--color-scheme`)
+
+**The default is `both` — every checking command runs each page under light *and*
+dark.** Deliberate: the headless browser renders `prefers-color-scheme: light` and
+does **not** inherit the host Mac's theme, so a single-mode run silently tests one
+theme — and if the developer works in dark mode, it's the *opposite* one. An a11y
+tool should check both by default.
+
+`--color-scheme <light|dark|both>` is on `axe`, `quick`, `tabwalk`, `vsr` and
+`sweep` (it sets the browser context, so one flag covers every tier). Pin a single
+scheme to zero in on one fix, re-check a specific contrast finding, or as
+self-documenting intent in a guide:
+
+```bash
+a11y quick http://localhost:8000/page --color-scheme dark > report.json   # one theme
+a11y sweep --urls pages.txt --storage-state state.json                    # both, the default
+```
+
+**Only contrast is theme-specific.** `color-contrast` measures rendered colours, so
+it genuinely differs by theme (a Flux light-palette failure often passes in dark —
+verified on a real app). Everything else — labels, landmarks, skip link, button
+names, heading levels, focus order, the transcript — is structural/semantic and
+comes back identical in both themes. So a `both` run's value is almost entirely in
+the contrast column. The both-mode JSON shape is in **Reading the report** below.
+
 A hard-won rule: if a tabwalk finding looks dramatic (focus trap, swathes of
 unreachable elements), re-run with `--settle 3000` before believing it. Focus
 behaviour during hydration is not what real users experience.
@@ -149,12 +174,25 @@ session, missing sample id) before drawing conclusions.
 
 ## Reading the report
 
-The JSON has `checks.axe`, `checks.tabwalk`, `checks.vsr`, each with a `findings`
-array: stable `id`, `impact` (critical / serious / moderate / minor), `summary`,
-`detail`, and affected `nodes`. Node shape is the same on every tier: `selector`
-(a CSS path — there is no `html` field), plus `failureSummary` on axe nodes
-only, carrying the per-node evidence. Don't guess at other field names; that's
-the whole schema.
+**Shape first — mind the colour scheme (default `both`).** A `both` run nests each
+theme's full result under `schemes.light` and `schemes.dark`, and adds a
+`schemeSummary` (single page) / a `schemes: [...]` field on each `summary.findings`
+entry (sweep) telling you which theme(s) each finding is in: `["light"]` light-only,
+`["dark"]` dark-only, `["light","dark"]` both. (At sweep level `["light","dark"]`
+means the finding hit both themes *somewhere* across the pages, not every page in
+both — drill into `schemes.<theme>` for the per-page truth.) A single-scheme run
+(`--color-scheme light|dark`) keeps the classic top-level `checks` instead, plus a
+`colorScheme` field. **The paths below are written for one scheme (`checks.axe`,
+`tabwalk.focusOrder`, …); under `both`, prefix them with `schemes.<theme>.`.**
+Contrast is the only tier that differs by theme — triage it from the summary and
+read the per-theme nodes; the structural/semantic material (focus order, landmarks,
+transcript) is identical across themes, so read one theme's.
+
+Each tier — `axe`, `tabwalk`, `vsr` — has a `findings` array: stable `id`, `impact`
+(critical / serious / moderate / minor), `summary`, `detail`, and affected `nodes`.
+Node shape is the same on every tier: `selector` (a CSS path — there is no `html`
+field), plus `failureSummary` on axe nodes only, carrying the per-node evidence.
+Don't guess at other field names; that's the whole schema.
 
 **Findings are verdicts.** Triage by impact; the ids are stable:
 - axe: rule ids like `color-contrast`, `label`, `button-name`, `target-size`
