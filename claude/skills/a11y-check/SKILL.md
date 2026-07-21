@@ -1,6 +1,6 @@
 ---
 name: a11y-check
-description: Run automated accessibility checks (axe-core, tab-order walk, virtual screen reader) against a running page and read the report. Use when the user asks for an accessibility/a11y check, after building or changing UI (forms, modals, navigation, Livewire components), or before shipping user-facing pages. Requires a local clone of the a11y-agent repo and the app running locally.
+description: Run automated accessibility checks (axe-core, tab-order walk, virtual screen reader) against a running page and read the report. Use when the user asks for an accessibility/a11y check, after building or changing UI (forms, modals, navigation, Livewire components), audit a user flow/journey (announcements, focus, and visibility during interactions) or before shipping user-facing pages. Requires a local clone of the a11y-agent repo and the app running locally.
 ---
 
 # a11y-check — automated accessibility checks
