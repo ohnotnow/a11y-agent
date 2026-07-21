@@ -212,7 +212,7 @@ playwright-cli snapshot        # fresh element refs — refs and selectors die o
 playwright-cli eval "$(cat "$A11Y_DIR/assets/observer-arm.js")"
 playwright-cli click e42       # the real interaction
 playwright-cli eval "() => new Promise(r => setTimeout(() => r('settled'), 1500))"   # hydration settle; 1.2-2s suits Livewire
-playwright-cli eval "$(cat "$A11Y_DIR/assets/observer-read.js")" > stage-3-readback.json
+playwright-cli --raw eval "$(cat "$A11Y_DIR/assets/observer-read.js")" > stage-3-readback.json   # --raw: plain JSON, no "### Result" wrapper
 ```
 
 Screenshot the stage with the element that matters ringed — big obvious

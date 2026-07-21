@@ -95,7 +95,7 @@ playwright-cli snapshot        # fresh refs every stage; they die on re-render
 playwright-cli eval "$(cat "$A11Y_DIR/assets/observer-arm.js")"
 playwright-cli click e42
 playwright-cli eval "() => new Promise(r => setTimeout(() => r('settled'), 1500))"
-playwright-cli eval "$(cat "$A11Y_DIR/assets/observer-read.js")" > "$SCRATCHPAD/stage-readback.json"
+playwright-cli --raw eval "$(cat "$A11Y_DIR/assets/observer-read.js")" > "$SCRATCHPAD/stage-readback.json"   # --raw: plain JSON, no "### Result" wrapper
 ```
 
 Ring the element that matters before each screenshot
