@@ -409,6 +409,8 @@ For background checks mid-session, spawn the `a11y-checker` sub-agent rather tha
 blocking the conversation. Quick mode only — the real-VoiceOver tier has its own
 rules, below.
 
+Finally - offer to copy the report and associated files (json, screenshots etc) to a directory in the current project and remind the user to either add it to gitignore or move it somewhere else.
+
 ## Full-fat mode: the real VoiceOver (`a11y sr`)
 
 The final-confirmation tier. It drives the user's *actual* VoiceOver — speech,
